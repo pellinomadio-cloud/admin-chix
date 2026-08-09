@@ -1,0 +1,354 @@
+
+import React, { useState } from 'react';
+import { Icons } from './Icons';
+import { User } from '../types';
+import { syncUserFromLocalToFirestore, useBankDetails } from '../firebase';
+import { motion, AnimatePresence } from 'motion/react';
+
+interface ImminentPaymentProps {
+  user: User;
+  onBack: () => void;
+}
+
+const ImminentPayment: React.FC<ImminentPaymentProps> = ({ user, onBack }) => {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'failed'>('idle');
+  const [paymentProof, setPaymentProof] = useState<string | null>(null);
+  const [showOpayWarning, setShowOpayWarning] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const { bankDetails } = useBankDetails();
+
+  const isDeactivated = user.deactivationDate ? Date.now() > user.deactivationDate : false;
+  const amount = isDeactivated ? 30000 : 20000;
+
+  const handlePayNow = () => {
+    navigator.clipboard.writeText(bankDetails.accountNumber);
+    setShowOpayWarning(true);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPaymentProof(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = () => {
+    const existingUsersStr = localStorage.getItem('chix9ja_users');
+    const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
+    const currentUser: User = existingUsers[user.email.toLowerCase()];
+
+    if (currentUser && currentUser.pendingPaymentProof) {
+      alert("You already have a pending payment proof awaiting administrator verification. You cannot upload another receipt until it is approved or declined.");
+      return;
+    }
+
+    const oneHour = 60 * 60 * 1000;
+    if (currentUser && currentUser.lastUploadTimestamp && (Date.now() - currentUser.lastUploadTimestamp < oneHour)) {
+      const remainingMinutes = Math.ceil((oneHour - (Date.now() - currentUser.lastUploadTimestamp)) / (60 * 1000));
+      alert(`You can only upload a receipt once every hour. Please wait ${remainingMinutes} minutes before attempting another upload.`);
+      return;
+    }
+
+    if (!paymentProof) {
+      alert("Please upload payment proof before verifying.");
+      return;
+    }
+    setStatus('loading');
+    
+    setTimeout(() => {
+      const freshUsersStr = localStorage.getItem('chix9ja_users');
+      const freshUsers = freshUsersStr ? JSON.parse(freshUsersStr) : {};
+      const freshUser: User = freshUsers[user.email.toLowerCase()];
+
+      if (freshUser) {
+        freshUser.pendingActivation = 'imminent_payment';
+        freshUser.pendingPaymentProof = paymentProof;
+        freshUser.pendingPaymentAmount = amount;
+        freshUser.pendingPaymentDate = new Date().toISOString();
+        freshUser.lastUploadTimestamp = Date.now();
+
+        freshUsers[user.email.toLowerCase()] = freshUser;
+        localStorage.setItem('chix9ja_users', JSON.stringify(freshUsers));
+
+        syncUserFromLocalToFirestore(user.email).then(() => {
+          setStatus('failed');
+          setShowSuccessModal(true);
+        }).catch((e) => {
+          console.error("Firestore sync error:", e);
+          setStatus('failed');
+          setShowSuccessModal(true);
+        });
+      } else {
+        setStatus('failed');
+      }
+    }, 3000);
+  };
+
+  return (
+    <div className="px-4 py-6 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+      <div className="flex items-center space-x-2">
+        <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-800">
+             <Icons.ArrowLeft size={24} className="text-white" />
+        </button>
+        <h2 className="text-xl font-bold text-white">Imminent Activation</h2>
+      </div>
+
+      <div className="bg-green-glow/10 p-4 rounded-xl border border-green-glow/20 shadow-sm">
+        <h3 className="font-bold text-green-glow mb-2 flex items-center">
+            <Icons.ShieldCheck className="mr-2" size={18} />
+            Mandatory Activation
+        </h3>
+        <p className="text-sm text-gray-300 leading-relaxed font-medium">
+            New users and subscribers must complete the imminent payment to secure their account status. This is a one-time verification requirement.
+        </p>
+      </div>
+
+      {/* PAY Now Section */}
+      <div className="bg-gray-900 rounded-2xl p-6 shadow-xl border border-gray-800 space-y-4 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1.5 h-full bg-green-glow"></div>
+        
+        <div className="text-center space-y-1">
+            <p className="text-xs font-black text-green-glow uppercase tracking-widest">{isDeactivated ? 'Deactivation Penalty' : 'Verification Amount'}</p>
+            <p className="text-3xl font-black text-white">₦{amount.toLocaleString()}</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-left border-t border-gray-800 pt-4">
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Bank Name</p>
+            <p className="text-sm font-black text-white">{bankDetails.bankName}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Account Name</p>
+            <p className="text-sm font-black text-white">{bankDetails.accountName}</p>
+          </div>
+          <div className="col-span-2 space-y-1">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Account Number</p>
+            <div className="flex items-center justify-between bg-black p-3 rounded-xl border border-gray-800">
+              <p className="text-xl font-black text-green-glow tracking-wider">{bankDetails.accountNumber}</p>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(bankDetails.accountNumber);
+                  setShowOpayWarning(true);
+                }}
+                className="p-2 bg-green-glow/10 text-green-glow rounded-lg active:scale-90 transition-transform"
+              >
+                <Icons.Copy size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button 
+          onClick={handlePayNow}
+          className="w-full py-5 bg-green-glow hover:bg-green-dark text-black font-black text-xl rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center space-x-3 group"
+        >
+          <Icons.Banknote size={28} className="group-hover:rotate-6 transition-transform" />
+          <span className="uppercase tracking-widest">Copy Details</span>
+        </button>
+        
+        <p className="text-[10px] text-gray-500 text-center font-medium italic">Make payment of ₦{amount.toLocaleString()} to the account above</p>
+        
+        <div className="bg-red-900/20 p-3 rounded-lg border border-red-800 text-center">
+          <p className="text-[10px] text-red-400 font-bold leading-tight uppercase tracking-tight">
+            ⚠️ DO NOT USE OPAY AND PALMPAY TO PAY FOR SUBSCRIPTION. <br/>
+            MONIEPOINT AND ANY OTHER BANK IS ALLOWED.
+          </p>
+        </div>
+      </div>
+
+
+
+      <div className="space-y-4 pt-2 border-t border-gray-800">
+          {/* Payment Proof Upload */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1 text-center">Step 2: Upload Payment Proof</p>
+            <div className="relative">
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleFileUpload}
+                className="sr-only" 
+                id="imminent-proof-upload"
+              />
+              <label 
+                htmlFor="imminent-proof-upload"
+                className={`w-full py-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center space-y-2 cursor-pointer transition-all ${
+                  paymentProof ? 'border-green-500 bg-green-900/20' : 'border-gray-800 hover:border-green-glow'
+                }`}
+              >
+                {paymentProof ? (
+                  <>
+                    <Icons.CheckCircle className="text-green-500" size={24} />
+                    <span className="text-xs font-bold text-green-400 uppercase">Proof Uploaded</span>
+                  </>
+                ) : (
+                  <>
+                    <Icons.Upload className="text-gray-500" size={24} />
+                    <span className="text-xs font-bold text-gray-500 uppercase">Click to Upload Receipt</span>
+                  </>
+                )}
+              </label>
+            </div>
+          </div>
+
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1 text-center">Step 3: Confirm Activation</p>
+
+          {status === 'failed' && (
+              <div className="bg-red-900/30 p-4 rounded-xl flex items-center justify-center space-x-3 animate-in shake duration-300 border border-red-800">
+                  <div className="bg-red-800 p-1 rounded-full">
+                      <Icons.X className="text-red-100" size={18} />
+                  </div>
+                  <p className="text-sm font-bold text-red-300">Verification Pending. Ensure payment is sent.</p>
+              </div>
+          )}
+
+          <button 
+            onClick={handleSubmit} 
+            disabled={status === 'loading'}
+            className="w-full py-4 bg-green-glow hover:bg-green-dark disabled:bg-gray-800 text-black font-black rounded-xl shadow-lg transition-all flex items-center justify-center space-x-2 active:scale-95 uppercase tracking-widest"
+          >
+              {status === 'loading' ? (
+                  <>
+                    <Icons.Sync className="animate-spin" size={20} />
+                    <span>Verifying...</span>
+                  </>
+              ) : (
+                  <span>Verify</span>
+              )}
+          </button>
+
+          <div className="bg-gray-900 p-3 rounded-lg text-center border border-gray-800">
+            <p className="text-[10px] text-gray-500 font-medium leading-tight">
+                Our security protocol will automatically match your transaction ID. <br/>
+                <span className="font-bold">Avoid duplicate activation attempts.</span>
+            </p>
+          </div>
+      </div>
+
+      {/* Beautiful OPay & PalmPay warning modal overlay */}
+      <AnimatePresence>
+        {showOpayWarning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowOpayWarning(false)}
+            className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.92, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm rounded-[24px] p-6 border border-emerald-500/20 text-center space-y-5 bg-gradient-to-b from-gray-950 via-zinc-950 to-black shadow-[0_0_50px_rgba(239,68,68,0.25)] relative overflow-hidden"
+            >
+              {/* Top Accent Bar */}
+              <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-red-550 via-amber-500 to-red-500" />
+              
+              {/* Outer Glowing Circle around Warning Icon */}
+              <div className="mx-auto w-16 h-16 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 animate-bounce">
+                <Icons.AlertTriangle size={36} className="text-red-500 text-glow-red" />
+              </div>
+
+              {/* Header Titles */}
+              <div className="space-y-1">
+                <div className="inline-flex items-center space-x-1 px-2.5 py-1 bg-red-500/10 rounded-full border border-red-500/10">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                  <span className="text-[9px] font-black uppercase text-red-500 tracking-widest font-mono">CRITICAL WARNING</span>
+                </div>
+                <h3 className="text-sm font-black text-white uppercase tracking-tight">Do Not Use OPay or PalmPay</h3>
+              </div>
+
+              {/* Informative Text block */}
+              <p className="text-[11px] text-gray-400 font-sans leading-relaxed">
+                Payments made through <strong className="text-red-405">OPay</strong> or <strong className="text-red-405">PalmPay</strong> accounts are <strong className="text-white">NOT supported</strong> by our automatic bank synchronization nodes. Transferring via these platforms can cause automatic activation timeouts or lost funds.
+              </p>
+
+              {/* Allowed Alternatives Box */}
+              <div className="bg-emerald-950/20 border border-emerald-500/25 rounded-xl p-3 space-y-2 text-left">
+                <p className="text-[8px] font-black uppercase text-emerald-400 tracking-wider font-mono font-bold">SUPPORTED PAYMENT CHANNELS</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {['GTBank', 'Zenith Bank', 'Access Bank', 'Moniepoint', 'UBA', 'Kuda', 'Wema'].map(bName => (
+                    <span key={bName} className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/15 text-emerald-300 font-mono text-[8.5px] font-bold">
+                      ✓ {bName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <button
+                type="button"
+                onClick={() => setShowOpayWarning(false)}
+                className="w-full py-3 bg-red-500 hover:bg-red-605 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-[0_4px_16px_rgba(239,68,68,0.2)] active:scale-95"
+              >
+                I Understand, Proceed
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Beautiful payment success check-in popup */}
+      <AnimatePresence>
+        {showSuccessModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className="w-full max-w-sm rounded-[24px] p-6 border border-green-500/20 text-center space-y-5 bg-gradient-to-b from-gray-950 via-zinc-950 to-black shadow-[0_0_50px_rgba(34,197,94,0.25)] relative overflow-hidden"
+            >
+              {/* Top Custom Border bar */}
+              <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-500 via-green-glow to-teal-500" />
+              
+              <div className="mx-auto w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center text-green-500 animate-pulse">
+                <Icons.CheckCircle size={36} className="text-green-400 text-glow-green" />
+              </div>
+
+              <div className="space-y-2">
+                <div className="inline-flex items-center space-x-1 px-2.5 py-1 bg-green-500/10 rounded-full border border-green-500/10">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" />
+                  <span className="text-[9px] font-black uppercase text-green-400 tracking-widest font-mono">SUBMITTED SUCCESSFULLY</span>
+                </div>
+                <h3 className="text-base font-black text-white uppercase tracking-tight">Payment Upload Received</h3>
+              </div>
+
+              <div className="text-xs text-gray-300 leading-relaxed font-sans space-y-3 px-1">
+                <p>
+                  Your activation files have been successfully uploaded to the central chix9ja database nodes for instant review.
+                </p>
+                <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800 text-[11px] text-green-glow font-bold leading-relaxed">
+                  📧 You will receive an email within <span className="font-extrabold text-white">5 minutes</span> notifying you if your activation has been approved!
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  onBack();
+                }}
+                className="w-full py-3.5 bg-green-glow text-black font-extrabold text-[11px] uppercase tracking-widest rounded-xl transition-all shadow-[0_4px_16px_rgba(34,197,94,0.2)] active:scale-95 hover:bg-emerald-400"
+              >
+                Return to Dashboard
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+    </div>
+  );
+};
+
+export default ImminentPayment;

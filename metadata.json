@@ -1,0 +1,6 @@
+{
+  "name": "chix9ja Admin Dashboard",
+  "description": "Central administrative dashboard for managing chix9ja users, approvals, transactions, and settings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
