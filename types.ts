@@ -47,6 +47,8 @@ export interface User {
   name: string;
   email: string;
   balance: number;
+  createdAt?: string | number;
+  registeredAt?: string | number;
   profileImage?: string;
   isSubscribed?: boolean;
   subscriptionPlan?: string;

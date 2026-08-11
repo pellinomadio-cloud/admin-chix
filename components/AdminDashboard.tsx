@@ -114,6 +114,42 @@ const getInitialAdminAuth = (): boolean => {
   }
 };
 
+const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
+
+export const getUserAccountAgeDays = (user: User, nowMs: number = Date.now()): { ageDays: number; isOlderThan2Months: boolean; createdDateStr: string } => {
+  let createdMs: number | null = null;
+  
+  if (user.createdAt) {
+    createdMs = typeof user.createdAt === 'number' ? user.createdAt : new Date(user.createdAt).getTime();
+  } else if (user.registeredAt) {
+    createdMs = typeof user.registeredAt === 'number' ? user.registeredAt : new Date(user.registeredAt).getTime();
+  } else if (user.dailyWaitlistJoinedAt) {
+    createdMs = user.dailyWaitlistJoinedAt;
+  } else if (user.transactions && user.transactions.length > 0) {
+    const dates = user.transactions
+      .map(t => new Date(t.date || 0).getTime())
+      .filter(t => !isNaN(t) && t > 0);
+    if (dates.length > 0) {
+      createdMs = Math.min(...dates);
+    }
+  }
+
+  if (!createdMs || isNaN(createdMs)) {
+    if (user.subscriptionExpiryDate) {
+      createdMs = user.subscriptionExpiryDate - (30 * 24 * 60 * 60 * 1000);
+    } else {
+      createdMs = nowMs;
+    }
+  }
+
+  const ageMs = nowMs - createdMs;
+  const ageDays = Math.max(0, Math.floor(ageMs / (1000 * 60 * 60 * 24)));
+  const isOlderThan2Months = ageMs >= SIXTY_DAYS_MS;
+  const createdDateStr = new Date(createdMs).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+
+  return { ageDays, isOlderThan2Months, createdDateStr };
+};
+
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(getInitialAdminAuth);
   const [adminEmail, setAdminEmail] = useState('pellinomadio@gmail.com');
@@ -148,7 +184,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [injectTxStatus, setInjectTxStatus] = useState<'success' | 'pending' | 'failed'>('success');
 
   // Filter accounts state
-  const [filterType, setFilterType] = useState<'all' | 'pending_verification' | 'unsubscribed' | 'restricted'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'pending_verification' | 'unsubscribed' | 'restricted' | 'older_2_months'>('all');
   const [searchEmail, setSearchEmail] = useState('');
   const [showPendingSubPage, setShowPendingSubPage] = useState(false);
   const [showAdvertsSubPage, setShowAdvertsSubPage] = useState(false);
@@ -556,7 +592,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             setIsSyncing(false);
         });
 
-        const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
+        const interval = setInterval(() => setCurrentTime(Date.now()), 15000);
 
         // Real-time giveaway claims fetch
         const unsubGiveaway = onSnapshot(collection(db, 'giveaways'), (querySnapshot) => {
@@ -793,11 +829,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     const targetUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     
     if (targetUser) {
+        const isCurrentlyBanned = !!currentDeactivationDate || !!targetUser.isRestricted;
         const updatedUser = { ...targetUser };
-        if (currentDeactivationDate) {
+        if (isCurrentlyBanned) {
             updatedUser.deactivationDate = undefined;
+            updatedUser.isRestricted = false;
+            updatedUser.restrictionType = undefined;
+            updatedUser.banRecoveryCode = undefined;
+            alert(`Account unbanned and fully restored for ${targetUser.name}.`);
         } else {
-            updatedUser.deactivationDate = Date.now() + 86400000; // 24 hours
+            const code = prompt(`Enter recovery code for ${targetUser.name} (User must buy code for ₦40,000 from vendor):`, targetUser.banRecoveryCode || "CHI999") || "CHI999";
+            updatedUser.deactivationDate = Date.now() + 36500 * 86400000;
+            updatedUser.isRestricted = true;
+            updatedUser.restrictionType = 'ban';
+            updatedUser.banRecoveryCode = code;
+            alert(`Account SUSPENDED/BANNED for ${targetUser.name}.\n\nRecovery Code: ${code}.\nUser must purchase code for ₦40,000 from vendor to unlock.`);
         }
         saveUserDocument(email, updatedUser);
     }
@@ -1206,18 +1252,78 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
          const minsLeft = Math.ceil((user.imminentDeactivationExpiry - currentTime) / (1000 * 60));
          return `Imminent (${minsLeft}m)`;
     }
-    if (!user.deactivationDate) return 'Active';
-    if (currentTime < user.deactivationDate) {
-        const diff = user.deactivationDate - currentTime;
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-        
-        if (hours > 0) return `Pending (${hours}h ${minutes}m)`;
-        if (minutes > 0) return `Pending (${minutes}m ${seconds}s)`;
-        return `Pending (${seconds}s)`;
+    if (user.isRestricted || user.deactivationDate) return 'Banned / Suspended';
+    return 'Active';
+  };
+
+  const handleDeleteUser = async (email: string) => {
+    const emailKey = email.toLowerCase().trim();
+    if (!confirm(`⚠️ Are you sure you want to PERMANENTLY delete account (${emailKey})?\n\nThis will remove the user from Firebase Firestore and local database completely.`)) {
+      return;
     }
-    return 'Deactivated';
+
+    try {
+      await deleteDoc(doc(db, 'users', emailKey));
+
+      const existingUsersStr = localStorage.getItem('chix9ja_users');
+      if (existingUsersStr) {
+        const existingUsers = JSON.parse(existingUsersStr);
+        delete existingUsers[emailKey];
+        localStorage.setItem('chix9ja_users', JSON.stringify(existingUsers));
+      }
+
+      setUsers(prev => prev.filter(u => u.email.toLowerCase().trim() !== emailKey));
+      alert(`Account ${emailKey} successfully deleted from Firestore and database!`);
+    } catch (err) {
+      console.error("Error deleting user account from Firestore:", err);
+      alert("Failed to delete account: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handlePurgeOldUsers = async () => {
+    const oldUsers = users.filter(u => getUserAccountAgeDays(u, currentTime).isOlderThan2Months);
+    if (oldUsers.length === 0) {
+      alert("No user accounts found that are 2 months (60 days) or older.");
+      return;
+    }
+
+    if (!confirm(`⚠️ WARNING: Found ${oldUsers.length} user account(s) that have been active for 2 months (60+ days) or older.\n\nAre you sure you want to PERMANENTLY DELETE all ${oldUsers.length} accounts from Firebase Firestore and local database?`)) {
+      return;
+    }
+
+    setIsSyncing(true);
+    let deletedCount = 0;
+    const deletedEmails = new Set<string>();
+
+    try {
+      for (const u of oldUsers) {
+        const emailKey = u.email.toLowerCase().trim();
+        try {
+          await deleteDoc(doc(db, 'users', emailKey));
+          deletedEmails.add(emailKey);
+          deletedCount++;
+        } catch (e) {
+          console.error(`Failed to delete user ${emailKey} from Firestore:`, e);
+        }
+      }
+
+      const existingUsersStr = localStorage.getItem('chix9ja_users');
+      if (existingUsersStr) {
+        const existingUsers = JSON.parse(existingUsersStr);
+        for (const emailKey of deletedEmails) {
+          delete existingUsers[emailKey];
+        }
+        localStorage.setItem('chix9ja_users', JSON.stringify(existingUsers));
+      }
+
+      setUsers(prev => prev.filter(u => !deletedEmails.has(u.email.toLowerCase().trim())));
+      alert(`🎉 Successfully purged ${deletedCount} user account(s) older than 2 months from Firebase Firestore!`);
+    } catch (err) {
+      console.error("Error purging 2-month old user accounts:", err);
+      alert("An error occurred during account purge: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Performance optimizations using useMemo to avoid laggy filtering and search re-renders
@@ -1237,7 +1343,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   }, [users]);
 
   const displayedUsers = useMemo(() => {
-    if (!searchEmail.trim() && filterType !== 'pending_verification') {
+    if (!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months') {
       return [];
     }
     return users.filter(user => {
@@ -1251,9 +1357,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       if (filterType === 'pending_verification') return !!user.pendingActivation;
       if (filterType === 'unsubscribed') return !user.isSubscribed;
       if (filterType === 'restricted') return user.isRestricted || !!user.deactivationDate || !!user.imminentDeactivationExpiry;
+      if (filterType === 'older_2_months') return getUserAccountAgeDays(user, currentTime).isOlderThan2Months;
       return true;
     });
-  }, [users, searchEmail, filterType]);
+  }, [users, searchEmail, filterType, currentTime]);
 
   const slicedDisplayedUsers = useMemo(() => {
     return displayedUsers.slice(0, visibleUsersCount);
@@ -1262,9 +1369,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const stats = useMemo(() => {
     return {
       subscribersCount: users.filter(u => u.isSubscribed).length,
-      restrictedCount: users.filter(u => u.isRestricted || u.deactivationDate || u.imminentDeactivationExpiry).length
+      restrictedCount: users.filter(u => u.isRestricted || u.deactivationDate || u.imminentDeactivationExpiry).length,
+      olderThan2MonthsCount: users.filter(u => getUserAccountAgeDays(u, currentTime).isOlderThan2Months).length
     };
-  }, [users]);
+  }, [users, currentTime]);
 
   if (!isAuthenticated) {
     return (
@@ -2449,8 +2557,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                         </div>
                     </div>
 
+                    {/* 2-Month Account Purge Control Terminal */}
+                    <div className="p-4 bg-rose-950/30 border border-rose-500/20 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1 text-left">
+                            <div className="flex items-center space-x-2">
+                                <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                                <h4 className="text-xs font-black font-mono uppercase text-rose-400 tracking-wider">Automated 2-Month Account Cleanup</h4>
+                            </div>
+                            <p className="text-[10px] text-zinc-400 font-mono">
+                                Accounts older than 2 months (60+ days): <span className="text-white font-bold">{stats.olderThan2MonthsCount}</span>. Purging will delete them permanently from Firebase Firestore and local database.
+                            </p>
+                        </div>
+                        <div className="flex items-center space-x-2 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setFilterType('older_2_months')}
+                                className="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-[10px] font-mono uppercase tracking-wider rounded-xl border border-zinc-700 transition-all"
+                            >
+                                View ({stats.olderThan2MonthsCount})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePurgeOldUsers}
+                                disabled={stats.olderThan2MonthsCount === 0 || isSyncing}
+                                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-black text-[10px] font-mono uppercase tracking-wider rounded-xl transition-all flex items-center space-x-1.5 shadow-md active:scale-95 cursor-pointer"
+                            >
+                                <Trash size={12} />
+                                <span>Purge All 2+ Month Accounts ({stats.olderThan2MonthsCount})</span>
+                            </button>
+                        </div>
+                    </div>
+
                     {/* Filter category bar */}
-                    <div className="grid grid-cols-4 gap-1.5 p-1 bg-black rounded-2xl border border-zinc-800">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1 bg-black rounded-2xl border border-zinc-800">
                         <button
                             type="button"
                             onClick={() => setFilterType('all')}
@@ -2479,22 +2618,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                         >
                             Locked
                         </button>
+                        <button
+                            type="button"
+                            onClick={() => setFilterType('older_2_months')}
+                            className={`py-2 px-1 rounded-xl text-[9px] font-black font-mono uppercase tracking-wider text-center transition-all ${filterType === 'older_2_months' ? 'bg-rose-600 text-white font-extrabold' : 'text-rose-400 hover:text-white hover:bg-rose-950/40'}`}
+                        >
+                            2+ Months ({stats.olderThan2MonthsCount})
+                        </button>
                     </div>
                 </div>
                 
                 {/* User Cards Block List */}
                 <div className="divide-y divide-zinc-800 bg-black">
-                    {!searchEmail.trim() && filterType !== 'pending_verification' ? (
+                    {!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months' ? (
                         <div className="p-10 text-center font-mono py-16 space-y-4">
-                            <p className="text-emerald-400 text-xs font-black uppercase tracking-widest">Search Required</p>
+                            <p className="text-emerald-400 text-xs font-black uppercase tracking-widest">Search Required or Select Filter</p>
                             <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
-                                Enter a user's name or email address in the search box above to retrieve and manage their account details.
+                                Enter a user's name or email address in the search box above, or select "Pending" or "2+ Months" filter to view accounts.
                             </p>
-                            <div className="pt-2 flex justify-center">
+                            <div className="pt-2 flex justify-center space-x-3">
                                 <span className="inline-flex items-center space-x-2 px-4 py-1.5 bg-zinc-900/60 border border-zinc-800/80 rounded-full text-xs font-bold">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    <span className="text-zinc-400">Registered Users Pool:</span>
+                                    <span className="text-zinc-400">Total Users:</span>
                                     <span className="text-white font-mono">{users.length}</span>
+                                </span>
+                                <span className="inline-flex items-center space-x-2 px-4 py-1.5 bg-rose-950/40 border border-rose-500/20 rounded-full text-xs font-bold">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                    <span className="text-rose-300">2+ Months Old:</span>
+                                    <span className="text-rose-400 font-mono">{stats.olderThan2MonthsCount}</span>
                                 </span>
                             </div>
                         </div>
@@ -2507,14 +2658,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                             const status = getDeactivationStatus(user);
                             const isDeactivated = status === 'Deactivated';
                             const isImminent = status.startsWith('Imminent');
+                            const accountAge = getUserAccountAgeDays(user, currentTime);
 
                             return (
                                 <div key={idx} className="p-5 space-y-4 hover:bg-zinc-900/30 transition-colors">
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/40 border border-zinc-800 p-4 rounded-2xl">
-                                        <div className="space-y-2">
+                                        <div className="space-y-2 text-left">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <p className="font-extrabold text-white text-sm">{user.name}</p>
                                                 <span className="text-[9px] font-mono text-zinc-500">({user.email})</span>
+                                                <span className={`text-[9px] font-mono px-2 py-0.5 rounded-md font-bold ${accountAge.isOlderThan2Months ? 'bg-rose-950 text-rose-400 border border-rose-500/30' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'}`}>
+                                                    Age: {accountAge.ageDays}d ({accountAge.createdDateStr}) {accountAge.isOlderThan2Months ? '⚠️ 2+ MONTHS OLD' : ''}
+                                                </span>
                                             </div>
                                             <div className="flex flex-wrap gap-2 text-[10px] font-mono font-bold">
                                                 <span className="text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-0.5">Base: ₦{user.balance.toLocaleString()}</span>
@@ -2539,6 +2694,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
                                     {/* Action Tags */}
                                     <div className="flex flex-wrap gap-1.5 pl-1">
+                                        {accountAge.isOlderThan2Months && (
+                                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-950 text-rose-400 border border-rose-500/30 font-mono">
+                                                EXCEEDED 2 MONTHS LIMIT
+                                            </span>
+                                        )}
                                         {user.isVMode && (
                                             <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-white text-black font-mono">
                                                 AUTO VERIFICATION vMODE
@@ -2611,9 +2771,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                             </button>
                                             <button 
                                                 onClick={() => handleToggleDeactivate(user.email, user.deactivationDate)} 
-                                                className={`py-2 text-[9px] font-black font-mono uppercase tracking-wider rounded-xl border transition-all active:scale-[0.98] ${user.deactivationDate ? 'bg-emerald-950 text-emerald-400 border-emerald-500/30 animate-pulse' : 'bg-zinc-900/45 text-rose-450 text-rose-500 border border-rose-500/20 hover:bg-rose-950/20'}`}
+                                                className={`py-2 text-[9px] font-black font-mono uppercase tracking-wider rounded-xl border transition-all active:scale-[0.98] ${user.deactivationDate || user.isRestricted ? 'bg-emerald-950 text-emerald-400 border-emerald-500/30' : 'bg-zinc-900/45 text-rose-500 border border-rose-500/20 hover:bg-rose-950/20'}`}
                                             >
-                                                {user.deactivationDate ? 'Unlock Service Node' : 'Impose 24h Lockout'}
+                                                {user.deactivationDate || user.isRestricted ? 'Unban / Restore Account' : 'Suspend / Ban Account'}
                                             </button>
                                             <button 
                                                 onClick={() => handleTriggerImminent(user.email)} 
@@ -2626,6 +2786,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                                 className="py-2 text-[9px] font-black font-mono uppercase tracking-wider rounded-xl border border-emerald-500/25 bg-emerald-950/40 text-emerald-400 hover:bg-emerald-950/80 transition-all text-center flex items-center justify-center space-x-1"
                                             >
                                                 <span>Invite Alert Msg</span>
+                                            </button>
+                                            
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleDeleteUser(user.email)} 
+                                                className="py-2 text-[9px] font-black font-mono uppercase tracking-wider rounded-xl border border-rose-500/30 bg-rose-950/50 text-rose-400 hover:bg-rose-900/80 hover:text-white transition-all text-center flex items-center justify-center space-x-1"
+                                                title="Delete user account permanently from Firebase Firestore and local DB"
+                                            >
+                                                <Trash size={10} />
+                                                <span>Delete User</span>
                                             </button>
                                             
                                             <button 
