@@ -2771,6 +2771,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                         )}
                                     </div>
 
+                                    {/* Linked Bank Account Details Box */}
+                                    {(user.linkedBankName || user.linkedAccountNumber) && (
+                                        <div className="p-3 bg-zinc-900/90 border border-emerald-500/30 rounded-2xl space-y-1.5 font-mono text-left">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center space-x-2">
+                                                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                                                    <h5 className="text-[11px] font-black text-emerald-400 uppercase tracking-wider">🏦 LINKED WITHDRAWAL BANK ACCOUNT</h5>
+                                                </div>
+                                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${user.isAccountLinkedVerified ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' : 'bg-amber-950 text-amber-400 border border-amber-500/30'}`}>
+                                                    {user.isAccountLinkedVerified ? 'VERIFIED' : 'PENDING LINK'}
+                                                </span>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2 text-[10px]">
+                                                <div>
+                                                    <span className="text-zinc-500 block uppercase font-bold text-[8px]">Bank:</span>
+                                                    <span className="text-white font-bold">{user.linkedBankName || 'N/A'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-zinc-500 block uppercase font-bold text-[8px]">Account Number:</span>
+                                                    <span className="text-emerald-300 font-extrabold">{user.linkedAccountNumber || 'N/A'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-zinc-500 block uppercase font-bold text-[8px]">Account Name:</span>
+                                                    <span className="text-white font-bold">{user.linkedAccountName || 'N/A'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Bank Payment Card Clearance Details Box */}
                                     {user.cardClearanceDetails && (
                                         <div className="p-4 bg-gradient-to-r from-zinc-950 via-zinc-900 to-amber-950/40 border border-amber-500/40 rounded-2xl space-y-3 font-mono shadow-md text-left">
