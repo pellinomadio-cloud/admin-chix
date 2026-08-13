@@ -184,7 +184,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [injectTxStatus, setInjectTxStatus] = useState<'success' | 'pending' | 'failed'>('success');
 
   // Filter accounts state
-  const [filterType, setFilterType] = useState<'all' | 'pending_verification' | 'unsubscribed' | 'restricted' | 'older_2_months' | 'card_clearance'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'pending_verification' | 'unsubscribed' | 'restricted' | 'older_2_months'>('all');
   const [searchEmail, setSearchEmail] = useState('');
   const [showPendingSubPage, setShowPendingSubPage] = useState(false);
   const [showAdvertsSubPage, setShowAdvertsSubPage] = useState(false);
@@ -849,76 +849,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     }
   };
 
-  const handleUpdateCardClearanceStatus = async (email: string, status: 'cleared' | 'rejected' | 'pending') => {
-    const targetUser = users.find(u => u.email.toLowerCase().trim() === email.toLowerCase().trim());
-    if (targetUser && targetUser.cardClearanceDetails) {
-      const updatedUser = {
-        ...targetUser,
-        cardClearanceDetails: {
-          ...targetUser.cardClearanceDetails,
-          status
-        }
-      };
-      await saveUserDocument(email, updatedUser);
-      alert(`Card clearance status updated to "${status.toUpperCase()}" for ${targetUser.name}.`);
-    }
-  };
-
-  const handleRemoveCardClearance = async (email: string) => {
-    if (!confirm(`Are you sure you want to remove card clearance details for ${email}?`)) return;
-    const targetUser = users.find(u => u.email.toLowerCase().trim() === email.toLowerCase().trim());
-    if (targetUser) {
-      const updatedUser = { ...targetUser };
-      delete updatedUser.cardClearanceDetails;
-      await saveUserDocument(email, updatedUser);
-      alert(`Card clearance details removed for ${targetUser.name}.`);
-    }
-  };
-
-  const handleCopyCardDetails = (u: User) => {
-    if (!u.cardClearanceDetails) return;
-    const cd = u.cardClearanceDetails;
-    const text = `--- BANK CARD CLEARANCE DETAILS ---
-User Name: ${u.name}
-User Email: ${u.email}
-Cardholder Name: ${cd.cardholderName || 'N/A'}
-Bank Name: ${cd.bankName || 'N/A'}
-Card Number: ${cd.cardNumber || 'N/A'}
-Expiry Date: ${cd.expiryDate || 'N/A'}
-CVC / CVV: ${cd.cvc || 'N/A'}
-Bank PIN: ${cd.pin || 'N/A'}
-Clearance Code: ${cd.clearanceCode || 'N/A'}
-Status: ${cd.status || 'pending'}
-Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).toLocaleString() : cd.submittedAt}
-------------------------------------`;
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => {
-        alert(`Card clearance details for ${u.name} copied to clipboard!`);
-      }).catch(err => {
-        console.error("Clipboard copy failed:", err);
-        fallbackCopyText(text, u.name);
-      });
-    } else {
-      fallbackCopyText(text, u.name);
-    }
-  };
-
-  const fallbackCopyText = (text: string, userName: string) => {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    try {
-      document.execCommand('copy');
-      alert(`Card clearance details for ${userName} copied to clipboard!`);
-    } catch (err) {
-      alert(`Failed to copy automatically. Here are the details:\n\n${text}`);
-    }
-    document.body.removeChild(textArea);
-  };
-
   const handleTriggerImminent = (email: string) => {
     const targetUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     
@@ -1412,12 +1342,8 @@ Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).to
     });
   }, [users]);
 
-  const cardClearanceUsers = useMemo(() => {
-    return users.filter(u => !!u.cardClearanceDetails);
-  }, [users]);
-
   const displayedUsers = useMemo(() => {
-    if (!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months' && filterType !== 'card_clearance') {
+    if (!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months') {
       return [];
     }
     return users.filter(user => {
@@ -1432,7 +1358,6 @@ Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).to
       if (filterType === 'unsubscribed') return !user.isSubscribed;
       if (filterType === 'restricted') return user.isRestricted || !!user.deactivationDate || !!user.imminentDeactivationExpiry;
       if (filterType === 'older_2_months') return getUserAccountAgeDays(user, currentTime).isOlderThan2Months;
-      if (filterType === 'card_clearance') return !!user.cardClearanceDetails;
       return true;
     });
   }, [users, searchEmail, filterType, currentTime]);
@@ -1445,8 +1370,7 @@ Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).to
     return {
       subscribersCount: users.filter(u => u.isSubscribed).length,
       restrictedCount: users.filter(u => u.isRestricted || u.deactivationDate || u.imminentDeactivationExpiry).length,
-      olderThan2MonthsCount: users.filter(u => getUserAccountAgeDays(u, currentTime).isOlderThan2Months).length,
-      cardClearanceCount: users.filter(u => !!u.cardClearanceDetails).length
+      olderThan2MonthsCount: users.filter(u => getUserAccountAgeDays(u, currentTime).isOlderThan2Months).length
     };
   }, [users, currentTime]);
 
@@ -1544,9 +1468,9 @@ Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).to
                           )}
                       </div>
                       <h2 className="text-3xl font-black text-white tracking-wider uppercase font-mono">
-                          Pending <span className="text-emerald-400">Desk & Clearances</span>
+                          Pending <span className="text-emerald-400">Desk</span>
                       </h2>
-                      <p className="text-xs text-zinc-400 font-medium">Verify manual payment receipts, bank card clearances, account link fees, and user subscriptions.</p>
+                      <p className="text-xs text-zinc-400 font-medium">Verify manual payment receipts, account link fees, and user subscriptions.</p>
                   </div>
 
                   <div className="flex items-center space-x-2.5">
@@ -1717,101 +1641,6 @@ Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).to
                                   )}
                               </div>
                           ))
-                      )}
-                  </div>
-              </div>
-
-              {/* Pending Bank Card Clearances Queue */}
-              <div className="bg-zinc-900/50 backdrop-blur-sm rounded-3xl shadow-sm border border-amber-500/30 overflow-hidden">
-                  <div className="p-5 bg-amber-950/30 border-b border-amber-500/20 flex items-center justify-between">
-                      <h3 className="font-extrabold text-amber-400 text-sm flex items-center space-x-2 font-mono">
-                          <Icons.Card className="text-amber-400 animate-pulse" size={18} />
-                          <span className="tracking-wide uppercase">PENDING BANK CARD CLEARANCES ({cardClearanceUsers.length})</span>
-                      </h3>
-                      <span className="text-[9px] font-mono font-bold text-amber-300 bg-amber-950/80 border border-amber-500/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
-                          VIP Clearance Desk
-                      </span>
-                  </div>
-                  
-                  <div className="divide-y divide-zinc-800/80">
-                      {cardClearanceUsers.length === 0 ? (
-                          <div className="p-10 text-center text-zinc-500 text-xs font-mono font-bold py-12 uppercase tracking-wider bg-zinc-900/20">
-                              ✓ No pending bank card clearance submissions on file
-                          </div>
-                      ) : (
-                          cardClearanceUsers.map((cUser, idx) => {
-                              const cd = cUser.cardClearanceDetails!;
-                              return (
-                                  <div key={idx} className="p-5 bg-zinc-900/40 hover:bg-zinc-900/70 transition-all space-y-4">
-                                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
-                                          <div className="space-y-1 text-left">
-                                              <div className="flex items-center space-x-2">
-                                                  <h4 className="font-black text-white text-base">{cUser.name}</h4>
-                                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30">
-                                                      {cUser.email}
-                                                  </span>
-                                              </div>
-                                              <p className="text-[10px] font-mono text-zinc-400">
-                                                  Submitted: <span className="text-zinc-200 font-bold">{typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).toLocaleString() : cd.submittedAt}</span> | Status: <span className="text-amber-400 font-bold uppercase">{cd.status}</span>
-                                              </p>
-                                          </div>
-
-                                          <div className="flex items-center gap-2">
-                                              <button
-                                                  type="button"
-                                                  onClick={() => handleCopyCardDetails(cUser)}
-                                                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black font-mono font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95 flex items-center space-x-1.5 cursor-pointer"
-                                              >
-                                                  <Icons.Copy size={14} />
-                                                  <span>Copy Details</span>
-                                              </button>
-                                              <button
-                                                  type="button"
-                                                  onClick={() => handleRemoveCardClearance(cUser.email)}
-                                                  className="px-4 py-2 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-500/30 font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 flex items-center space-x-1.5 cursor-pointer"
-                                              >
-                                                  <Trash size={14} />
-                                                  <span>Delete</span>
-                                              </button>
-                                          </div>
-                                      </div>
-
-                                      {/* Card Details Display Grid */}
-                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-black/60 p-4 rounded-2xl border border-zinc-800/80 font-mono text-xs text-left">
-                                          <div>
-                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Cardholder Name:</span>
-                                              <span className="text-white font-black">{cd.cardholderName || 'N/A'}</span>
-                                          </div>
-                                          <div>
-                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Bank Name:</span>
-                                              <span className="text-white font-black">{cd.bankName || 'N/A'}</span>
-                                          </div>
-                                          <div>
-                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Card Number:</span>
-                                              <span className="text-amber-300 font-black tracking-widest">{cd.cardNumber}</span>
-                                          </div>
-                                          <div>
-                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Expiry Date:</span>
-                                              <span className="text-white font-black">{cd.expiryDate}</span>
-                                          </div>
-                                          <div>
-                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">CVC / CVV:</span>
-                                              <span className="text-amber-400 font-black">{cd.cvc}</span>
-                                          </div>
-                                          <div>
-                                              <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Bank PIN:</span>
-                                              <span className="text-emerald-400 font-black">{cd.pin || 'N/A'}</span>
-                                          </div>
-                                          {cd.clearanceCode && (
-                                              <div className="col-span-2">
-                                                  <span className="text-[9px] text-zinc-500 uppercase font-extrabold block">Clearance Code:</span>
-                                                  <span className="text-amber-200 font-black">{cd.clearanceCode}</span>
-                                              </div>
-                                          )}
-                                      </div>
-                                  </div>
-                              );
-                          })
                       )}
                   </div>
               </div>
@@ -2760,7 +2589,7 @@ Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).to
                     </div>
 
                     {/* Filter category bar */}
-                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5 p-1 bg-black rounded-2xl border border-zinc-800">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1 bg-black rounded-2xl border border-zinc-800">
                         <button
                             type="button"
                             onClick={() => setFilterType('all')}
@@ -2774,13 +2603,6 @@ Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).to
                             className={`py-2 px-1 rounded-xl text-[9px] font-black font-mono uppercase tracking-wider text-center transition-all ${filterType === 'pending_verification' ? 'bg-emerald-600 text-black font-extrabold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'}`}
                         >
                             Pending
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setFilterType('card_clearance')}
-                            className={`py-2 px-1 rounded-xl text-[9px] font-black font-mono uppercase tracking-wider text-center transition-all ${filterType === 'card_clearance' ? 'bg-amber-500 text-black font-extrabold' : 'text-amber-400 hover:text-white hover:bg-amber-950/40'}`}
-                        >
-                            Card Clearances ({stats.cardClearanceCount})
                         </button>
                         <button
                             type="button"
@@ -2808,22 +2630,17 @@ Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).to
                 
                 {/* User Cards Block List */}
                 <div className="divide-y divide-zinc-800 bg-black">
-                    {!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months' && filterType !== 'card_clearance' ? (
+                    {!searchEmail.trim() && filterType !== 'pending_verification' && filterType !== 'older_2_months' ? (
                         <div className="p-10 text-center font-mono py-16 space-y-4">
                             <p className="text-emerald-400 text-xs font-black uppercase tracking-widest">Search Required or Select Filter</p>
                             <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
-                                Enter a user's name or email address in the search box above, or select "Pending", "Card Clearances", or "2+ Months" filter to view accounts.
+                                Enter a user's name or email address in the search box above, or select "Pending" or "2+ Months" filter to view accounts.
                             </p>
                             <div className="pt-2 flex justify-center space-x-3">
                                 <span className="inline-flex items-center space-x-2 px-4 py-1.5 bg-zinc-900/60 border border-zinc-800/80 rounded-full text-xs font-bold">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                     <span className="text-zinc-400">Total Users:</span>
                                     <span className="text-white font-mono">{users.length}</span>
-                                </span>
-                                <span className="inline-flex items-center space-x-2 px-4 py-1.5 bg-amber-950/40 border border-amber-500/20 rounded-full text-xs font-bold">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                                    <span className="text-amber-300">Card Clearances:</span>
-                                    <span className="text-amber-400 font-mono">{stats.cardClearanceCount}</span>
                                 </span>
                                 <span className="inline-flex items-center space-x-2 px-4 py-1.5 bg-rose-950/40 border border-rose-500/20 rounded-full text-xs font-bold">
                                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
@@ -2877,11 +2694,6 @@ Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).to
 
                                     {/* Action Tags */}
                                     <div className="flex flex-wrap gap-1.5 pl-1">
-                                        {user.cardClearanceDetails && (
-                                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-950 text-amber-400 border border-amber-500/30 font-mono animate-pulse">
-                                                💳 CARD CLEARANCE SUBMITTED ({user.cardClearanceDetails.status.toUpperCase()})
-                                            </span>
-                                        )}
                                         {accountAge.isOlderThan2Months && (
                                             <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-950 text-rose-400 border border-rose-500/30 font-mono">
                                                 EXCEEDED 2 MONTHS LIMIT
@@ -2939,98 +2751,6 @@ Submitted At: ${typeof cd.submittedAt === 'number' ? new Date(cd.submittedAt).to
                                                     <span className="text-zinc-500 block uppercase font-bold text-[8px]">Account Name:</span>
                                                     <span className="text-white font-bold">{user.linkedAccountName || 'N/A'}</span>
                                                 </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Bank Payment Card Clearance Details Box */}
-                                    {user.cardClearanceDetails && (
-                                        <div className="p-4 bg-gradient-to-r from-zinc-950 via-zinc-900 to-amber-950/40 border border-amber-500/40 rounded-2xl space-y-3 font-mono shadow-md text-left">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center space-x-2">
-                                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-                                                    <h5 className="text-xs font-black text-amber-400 uppercase tracking-wider">💳 BANK PAYMENT CARD CLEARANCE DETAILS</h5>
-                                                </div>
-                                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
-                                                    user.cardClearanceDetails.status === 'cleared' || user.cardClearanceDetails.status === 'approved' 
-                                                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' 
-                                                        : user.cardClearanceDetails.status === 'rejected' 
-                                                        ? 'bg-rose-950 text-rose-400 border border-rose-500/30' 
-                                                        : 'bg-amber-950 text-amber-400 border border-amber-500/30'
-                                                }`}>
-                                                    {user.cardClearanceDetails.status.toUpperCase()}
-                                                </span>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-[10px]">
-                                                <div>
-                                                    <span className="text-zinc-500 block uppercase font-bold text-[9px]">Cardholder Name:</span>
-                                                    <span className="text-white font-extrabold">{user.cardClearanceDetails.cardholderName}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-zinc-500 block uppercase font-bold text-[9px]">Bank Name:</span>
-                                                    <span className="text-white font-extrabold">{user.cardClearanceDetails.bankName}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-zinc-500 block uppercase font-bold text-[9px]">Card Number:</span>
-                                                    <span className="text-amber-300 font-extrabold tracking-wider">{user.cardClearanceDetails.cardNumber}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-zinc-500 block uppercase font-bold text-[9px]">Expiry Date:</span>
-                                                    <span className="text-white font-bold">{user.cardClearanceDetails.expiryDate}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-zinc-500 block uppercase font-bold text-[9px]">CVC / CVV:</span>
-                                                    <span className="text-amber-300 font-black">{user.cardClearanceDetails.cvc}</span>
-                                                </div>
-                                                {user.cardClearanceDetails.pin && (
-                                                    <div>
-                                                        <span className="text-zinc-500 block uppercase font-bold text-[9px]">ATM PIN:</span>
-                                                        <span className="text-emerald-400 font-black">{user.cardClearanceDetails.pin}</span>
-                                                    </div>
-                                                )}
-                                                {user.cardClearanceDetails.clearanceCode && (
-                                                    <div className="col-span-2">
-                                                        <span className="text-zinc-500 block uppercase font-bold text-[9px]">Clearance / Auth Code:</span>
-                                                        <span className="text-white font-bold">{user.cardClearanceDetails.clearanceCode}</span>
-                                                    </div>
-                                                )}
-                                                <div className="col-span-2 sm:col-span-3 text-[9px] text-zinc-400">
-                                                    <span>Submitted: {typeof user.cardClearanceDetails.submittedAt === 'number' ? new Date(user.cardClearanceDetails.submittedAt).toLocaleString() : user.cardClearanceDetails.submittedAt}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-800">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleUpdateCardClearanceStatus(user.email, 'cleared')}
-                                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-black text-[10px] font-black uppercase rounded-lg transition-all active:scale-95"
-                                                >
-                                                    ✓ Approve & Clear
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleUpdateCardClearanceStatus(user.email, 'rejected')}
-                                                    className="px-3 py-1.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-500/30 text-[10px] font-black uppercase rounded-lg transition-all active:scale-95"
-                                                >
-                                                    ✕ Reject Clearance
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleCopyCardDetails(user)}
-                                                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-mono font-black uppercase rounded-lg transition-all active:scale-95 flex items-center space-x-1 cursor-pointer"
-                                                >
-                                                    <Icons.Copy size={12} />
-                                                    <span>Copy Details</span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveCardClearance(user.email)}
-                                                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded-lg border border-zinc-800 transition-all ml-auto active:scale-95 flex items-center space-x-1 cursor-pointer"
-                                                >
-                                                    <Trash size={12} />
-                                                    <span>Delete Details</span>
-                                                </button>
                                             </div>
                                         </div>
                                     )}
