@@ -84,17 +84,17 @@ if (typeof window !== 'undefined' && window.localStorage) {
             const usersObj = JSON.parse(value);
             const activeEmail = localStorage.getItem('chix9ja_active_session')?.toLowerCase().trim();
             
-            // Helper to clean large fields inside a single user object to save space (e.g. Base64 proofs)
+            // Helper to clean large fields inside a single user object to save space while preserving payment proofs
             const cleanUserPayload = (u: any, isSelf: boolean) => {
               if (!u) return u;
               const cleaned = { ...u };
-              // Limit transactions
-              cleaned.transactions = u.transactions ? (isSelf ? u.transactions.slice(0, 10) : []) : [];
+              // Limit transactions count to save space
+              cleaned.transactions = u.transactions ? (isSelf ? u.transactions.slice(0, 15) : u.transactions.slice(0, 3)) : [];
               
-              // Strip any values that are very large (strings > 1000 chars, e.g. base64 screenshots)
+              // Only strip other arbitrary large non-essential strings, but NEVER strip pendingPaymentProof or paymentProof
               for (const k in cleaned) {
-                if (typeof cleaned[k] === 'string' && cleaned[k].length > 1000) {
-                  cleaned[k] = ""; // strip base64 content in localStorage cache
+                if (k !== 'pendingPaymentProof' && k !== 'paymentProof' && typeof cleaned[k] === 'string' && cleaned[k].length > 500000) {
+                  cleaned[k] = ""; 
                 }
               }
               return cleaned;
@@ -169,15 +169,18 @@ export function sanitizeForFirestore(obj: any): any {
 }
 
 // Synchronize local storage state changes made by specific subcomponents back to Firestore
-export async function syncUserFromLocalToFirestore(email: string): Promise<void> {
+export async function syncUserFromLocalToFirestore(email: string, userPayload?: any): Promise<void> {
   try {
     const emailKey = email.toLowerCase().trim();
-    const existingUsersStr = localStorage.getItem('chix9ja_users');
-    const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-    const currentUser = existingUsers[emailKey];
-    if (currentUser) {
-      const sanitized = sanitizeForFirestore(currentUser);
-      await setDoc(doc(db, 'users', emailKey), sanitized);
+    let userToSave = userPayload;
+    if (!userToSave) {
+      const existingUsersStr = localStorage.getItem('chix9ja_users');
+      const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
+      userToSave = existingUsers[emailKey];
+    }
+    if (userToSave) {
+      const sanitized = sanitizeForFirestore(userToSave);
+      await setDoc(doc(db, 'users', emailKey), sanitized, { merge: true });
     }
   } catch (e) {
     console.error("Local sync error:", e);

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Icons } from './Icons';
 import { User } from '../types';
 import { syncUserFromLocalToFirestore, useBankDetails } from '../firebase';
+import { compressImageFile } from '../utils/imageCompressor';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ImminentPaymentProps {
@@ -25,14 +26,19 @@ const ImminentPayment: React.FC<ImminentPaymentProps> = ({ user, onBack }) => {
     setShowOpayWarning(true);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPaymentProof(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, 1000, 1000, 0.75);
+        setPaymentProof(compressed);
+      } catch (err) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPaymentProof(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 

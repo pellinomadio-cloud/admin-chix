@@ -4,6 +4,7 @@ import { Icons } from './Icons';
 import { Plan, User } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { syncUserFromLocalToFirestore, useBankDetails, useAppChannels } from '../firebase';
+import { compressImageFile } from '../utils/imageCompressor';
 
 
 interface SubscribePaymentProps {
@@ -70,12 +71,17 @@ const SubscribePayment: React.FC<SubscribePaymentProps> = ({ plan, userEmail, on
     setStatus('loading');
 
     try {
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(proofFile);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (e) => reject(e);
-      });
+      let base64Data: string;
+      try {
+        base64Data = await compressImageFile(proofFile, 1000, 1000, 0.75);
+      } catch (err) {
+        base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(proofFile);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (e) => reject(e);
+        });
+      }
 
       setTimeout(() => {
           const existingUsersStr = localStorage.getItem('chix9ja_users');

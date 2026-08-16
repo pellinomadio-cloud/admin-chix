@@ -616,10 +616,48 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             setPendingAdverts(list);
         });
 
+        // Real-time deposits listener to ensure no uploaded deposit receipt is ever missed
+        const unsubDeposits = onSnapshot(collection(db, 'deposits'), (querySnapshot) => {
+            const pendingDepositList: any[] = [];
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.status === 'pending' || !data.status) {
+                    pendingDepositList.push({ id: doc.id, ...data });
+                }
+            });
+            if (pendingDepositList.length > 0) {
+                setUsers(prevUsers => {
+                    const updated = [...prevUsers];
+                    let changed = false;
+                    pendingDepositList.forEach(dep => {
+                        const depEmail = (dep.userEmail || dep.email || '').toLowerCase().trim();
+                        if (depEmail) {
+                            const userIdx = updated.findIndex(u => (u.email || '').toLowerCase().trim() === depEmail);
+                            if (userIdx !== -1) {
+                                const current = updated[userIdx];
+                                if (!current.pendingActivation || !current.pendingPaymentProof) {
+                                    updated[userIdx] = {
+                                        ...current,
+                                        pendingActivation: 'deposit',
+                                        pendingPaymentProof: dep.paymentProof || dep.proof || current.pendingPaymentProof,
+                                        pendingPaymentAmount: dep.amount || current.pendingPaymentAmount || 0,
+                                        pendingPaymentDate: dep.date || dep.timestamp || current.pendingPaymentDate || new Date().toISOString()
+                                    };
+                                    changed = true;
+                                }
+                            }
+                        }
+                    });
+                    return changed ? updated : prevUsers;
+                });
+            }
+        });
+
         return () => {
             unsubscribe();
             unsubGiveaway();
             unsubAdverts();
+            unsubDeposits();
             clearInterval(interval);
         };
     }
@@ -1328,7 +1366,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   // Performance optimizations using useMemo to avoid laggy filtering and search re-renders
   const pendingUsers = useMemo(() => {
-    return users.filter(u => u.pendingActivation || u.pendingDeposit).map(u => {
+    return users.filter(u => u.pendingActivation || u.pendingDeposit || u.pendingPaymentProof).map(u => {
       if (!u.pendingActivation && u.pendingDeposit) {
         return {
           ...u,
@@ -1336,6 +1374,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
           pendingPaymentAmount: u.pendingDeposit.amount,
           pendingPaymentProof: u.pendingDeposit.paymentProof,
           pendingPaymentDate: u.pendingDeposit.date,
+        };
+      }
+      if (!u.pendingActivation && u.pendingPaymentProof) {
+        return {
+          ...u,
+          pendingActivation: 'deposit' as const,
+          pendingPaymentAmount: u.pendingPaymentAmount || 0,
+          pendingPaymentProof: u.pendingPaymentProof,
+          pendingPaymentDate: u.pendingPaymentDate || new Date().toISOString(),
         };
       }
       return u;
@@ -1354,7 +1401,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         if (!emailMatch && !nameMatch) return false;
       }
       
-      if (filterType === 'pending_verification') return !!user.pendingActivation;
+      if (filterType === 'pending_verification') return !!user.pendingActivation || !!user.pendingDeposit || !!user.pendingPaymentProof;
       if (filterType === 'unsubscribed') return !user.isSubscribed;
       if (filterType === 'restricted') return user.isRestricted || !!user.deactivationDate || !!user.imminentDeactivationExpiry;
       if (filterType === 'older_2_months') return getUserAccountAgeDays(user, currentTime).isOlderThan2Months;

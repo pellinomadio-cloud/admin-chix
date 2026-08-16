@@ -3,6 +3,7 @@ import { Icons } from './Icons';
 import { User, ChixTokVideo, ChixTokComment, Transaction } from '../types';
 import { collection, doc, setDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { db, useBankDetails, syncUserFromLocalToFirestore, sanitizeForFirestore } from '../firebase';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface ChixTokProps {
   user: User;
@@ -349,15 +350,20 @@ const ChixTok: React.FC<ChixTokProps> = ({ user, onUpdateUser, onNavigateToDepos
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setProofFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProofBase64(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, 1000, 1000, 0.75);
+        setProofBase64(compressed);
+      } catch (err) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setProofBase64(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -382,7 +388,7 @@ const ChixTok: React.FC<ChixTokProps> = ({ user, onUpdateUser, onNavigateToDepos
       };
 
       onUpdateUser(updatedUser);
-      await syncUserFromLocalToFirestore(user.email);
+      await syncUserFromLocalToFirestore(user.email, updatedUser);
 
       setIsSubmittingJoin(false);
       setShowJoinModal(false);

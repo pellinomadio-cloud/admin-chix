@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Icons } from './Icons';
 import { Wallet, Coins, Trash2, AlertCircle, RefreshCw, AlertTriangle, ShieldAlert, X } from 'lucide-react';
 import { User, Transaction } from '../types';
-import { useBankDetails, db, sanitizeForFirestore } from '../firebase';
+import { useBankDetails, db, sanitizeForFirestore, syncUserFromLocalToFirestore } from '../firebase';
 import { doc, setDoc, addDoc, collection } from 'firebase/firestore';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface DepositPageProps {
   user: User;
@@ -44,20 +45,22 @@ export const DepositPage: React.FC<DepositPageProps> = ({
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 8 * 1024 * 1024) {
-        setErrorMessage('File size exceeds 8MB limit. Please upload a smaller receipt image.');
-        return;
-      }
       setFileName(file.name);
       setErrorMessage('');
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProofImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, 1000, 1000, 0.75);
+        setProofImage(compressed);
+      } catch (err) {
+        console.warn("Could not compress image, using fallback reader:", err);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setProofImage(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -123,18 +126,32 @@ export const DepositPage: React.FC<DepositPageProps> = ({
           date: isoDate,
           timestamp
         },
+        pendingActivation: 'deposit',
+        pendingPaymentProof: proofImage,
+        pendingPaymentAmount: numAmount,
+        pendingPaymentDate: isoDate,
+        lastUploadTimestamp: timestamp,
         transactions: updatedTransactions
       };
 
+      // Update in localStorage
+      const lowerEmail = user.email.toLowerCase().trim();
+      const existingUsersStr = localStorage.getItem('chix9ja_users');
+      const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
+      existingUsers[lowerEmail] = updatedUser;
+      localStorage.setItem('chix9ja_users', JSON.stringify(existingUsers));
+
       onUpdateUser(updatedUser);
 
-      // Save user record to Firestore
+      // Save user record to Firestore directly
       try {
-        const lowerEmail = user.email.toLowerCase().trim();
         await setDoc(doc(db, 'users', lowerEmail), sanitizeForFirestore(updatedUser), { merge: true });
       } catch (fErr) {
         console.error("Error updating user document on Firestore:", fErr);
       }
+
+      // Also trigger async backup sync
+      syncUserFromLocalToFirestore(lowerEmail, updatedUser);
 
       setIsSuccess(true);
     } catch (error) {

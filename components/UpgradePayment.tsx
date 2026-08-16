@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Icons } from './Icons';
 import { User } from '../types';
 import { syncUserFromLocalToFirestore, useBankDetails } from '../firebase';
+import { compressImageFile } from '../utils/imageCompressor';
 import { motion, AnimatePresence } from 'motion/react';
 import { Vip2CountdownTimer } from './UpgradeProposal';
 import { ArrowLeft, ShieldCheck, Copy, Check, AlertTriangle, Upload, CheckCircle, RefreshCw, Star, Ban } from 'lucide-react';
@@ -112,12 +113,17 @@ const UpgradePayment: React.FC<UpgradePaymentProps> = ({
     setStatus('loading');
 
     try {
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(proofFile);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (e) => reject(e);
-      });
+      let base64Data: string;
+      try {
+        base64Data = await compressImageFile(proofFile, 1000, 1000, 0.75);
+      } catch (err) {
+        base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(proofFile);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (e) => reject(e);
+        });
+      }
 
       setTimeout(() => {
         const freshUsersStr = localStorage.getItem('chix9ja_users');
