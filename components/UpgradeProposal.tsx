@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User } from '../types';
+import { useAppPricing } from '../firebase';
 import { 
   Zap, 
   ShieldCheck, 
@@ -132,16 +133,21 @@ const UpgradeProposal: React.FC<UpgradeProposalProps> = ({
 }) => {
   const [selectedTier, setSelectedTier] = useState<'vip1' | 'vip2' | 'vip3'>('vip1');
   const [showPreviewAnyway, setShowPreviewAnyway] = useState(false);
+  const { pricing } = useAppPricing();
 
   const isSubscribed = !!user?.isSubscribed;
   const hasPendingWithdrawal = user?.transactions?.some(t => t.type === 'debit' && t.status === 'pending');
   const isVip2Active = user?.vipTier === 'vip2' || user?.pendingActivation === 'vip2';
 
+  const vip1Price = pricing.vip1Price || 20000;
+  const vip2Price = pricing.vip2Price || 15000;
+  const vip3Price = pricing.vip3Price || 9850;
+
   const vipTiers = [
     {
       id: 'vip1' as const,
       name: 'VIP 1 — Instant Cashout',
-      price: '₦20,000',
+      price: `₦${vip1Price.toLocaleString()}`,
       badge: '⚡ INSTANT CASHOUT (BEST)',
       badgeBg: 'bg-emerald-500 text-white',
       timeline: 'Instant (0 Days)',
@@ -157,7 +163,7 @@ const UpgradeProposal: React.FC<UpgradeProposalProps> = ({
     {
       id: 'vip2' as const,
       name: 'VIP 2 — Express Cashout',
-      price: '₦15,000',
+      price: `₦${vip2Price.toLocaleString()}`,
       badge: '⏱️ 2 WORKING DAYS',
       badgeBg: 'bg-amber-500 text-black',
       timeline: '2 Working Days (3-Day Countdown)',
@@ -173,7 +179,7 @@ const UpgradeProposal: React.FC<UpgradeProposalProps> = ({
     {
       id: 'vip3' as const,
       name: 'VIP 3 — Standard VIP Cashout',
-      price: '₦9,850',
+      price: `₦${vip3Price.toLocaleString()}`,
       badge: '🗓️ 7 WORKING DAYS',
       badgeBg: 'bg-amber-800 text-white',
       timeline: '7 Working Days',

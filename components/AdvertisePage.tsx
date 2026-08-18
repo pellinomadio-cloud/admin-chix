@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from './Icons';
 import { User, Plan, ChixTokVideo } from '../types';
-import { db, useBankDetails, sanitizeForFirestore } from '../firebase';
+import { db, useBankDetails, useAppPricing, sanitizeForFirestore } from '../firebase';
 import { compressImageFile } from '../utils/imageCompressor';
 import { collection, addDoc, getDocs, query, where, doc, setDoc } from 'firebase/firestore';
 import { motion } from 'motion/react';
@@ -29,14 +29,22 @@ interface AdvertData {
 }
 
 export const AdvertisePage: React.FC<AdvertisePageProps> = ({ user, onBack, onGoToSubscribe }) => {
+  const { pricing } = useAppPricing();
+  const defaultDailyRate = pricing.advertDailyPrice || 1500;
   const [step, setStep] = useState<'form' | 'payment' | 'pending'>('form');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string>('');
   const [videoBase64, setVideoBase64] = useState<string>('');
   
   const [advertLink, setAdvertLink] = useState('');
-  const [price, setPrice] = useState('1500'); // Default price per day
+  const [price, setPrice] = useState(defaultDailyRate.toString()); // Dynamic price per day
   const [days, setDays] = useState('7'); // Default days
+
+  useEffect(() => {
+    if (pricing.advertDailyPrice) {
+      setPrice(pricing.advertDailyPrice.toString());
+    }
+  }, [pricing.advertDailyPrice]);
   
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofBase64, setProofBase64] = useState<string>('');

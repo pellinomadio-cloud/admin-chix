@@ -3,8 +3,8 @@ import { Icons } from './Icons';
 import { User, Transaction, ChixTokVideo } from '../types';
 import { getStoredChixTokVideos, saveChixTokVideos, deleteChixTokVideoFromFirestore } from './ChixTok';
 import { collection, getDocs, doc, setDoc, onSnapshot, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db, sanitizeForFirestore, useBankDetails, updateBankDetails, useGiveawayStatus, updateGiveawayStatus, useAppChannels, updateAppChannels } from '../firebase';
-import { Search, ShieldAlert, Sparkles, Zap, Lock, Eye, AlertCircle, RefreshCw, CheckCircle2, XCircle, Bell, Settings, UserCheck, HelpCircle, Trash, Megaphone, ExternalLink, PauseCircle, PlayCircle } from 'lucide-react';
+import { db, sanitizeForFirestore, useBankDetails, updateBankDetails, useGiveawayStatus, updateGiveawayStatus, useAppChannels, updateAppChannels, useAppPricing, updateAppPricing, AppPricingSettings, DEFAULT_APP_PRICING } from '../firebase';
+import { Search, ShieldAlert, Sparkles, Zap, Lock, Eye, AlertCircle, RefreshCw, CheckCircle2, XCircle, Bell, Settings, UserCheck, HelpCircle, Trash, Megaphone, ExternalLink, PauseCircle, PlayCircle, DollarSign, Tag } from 'lucide-react';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -344,6 +344,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [isUpdatingChannels, setIsUpdatingChannels] = useState(false);
   const [channelsSuccessMsg, setChannelsSuccessMsg] = useState('');
 
+  // Dynamic App Pricing & Fees states
+  const { pricing: appPricing } = useAppPricing();
+  const [pricingForm, setPricingForm] = useState<AppPricingSettings>(DEFAULT_APP_PRICING);
+  const [isUpdatingPricing, setIsUpdatingPricing] = useState(false);
+  const [pricingSuccessMsg, setPricingSuccessMsg] = useState('');
+
   // Community Broadcast States
   const [communityMessage, setCommunityMessage] = useState('');
   const [isSendingCommunity, setIsSendingCommunity] = useState(false);
@@ -365,6 +371,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       setEditVendorTelegram(appChannels.vendorTelegram || '');
     }
   }, [appChannels]);
+
+  useEffect(() => {
+    if (appPricing) {
+      setPricingForm(appPricing);
+    }
+  }, [appPricing]);
+
+  const handleUpdatePricingSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsUpdatingPricing(true);
+    setPricingSuccessMsg('');
+    try {
+      await updateAppPricing(pricingForm);
+      setPricingSuccessMsg('All subscription, VIP tiers, investment, and fee prices updated successfully and synchronized to cloud!');
+      setTimeout(() => setPricingSuccessMsg(''), 6000);
+    } catch (err) {
+      console.error("Error updating pricing in Firestore settings:", err);
+      alert("Failed to update pricing configuration: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsUpdatingPricing(false);
+    }
+  };
 
   const handleUpdateBankSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2464,6 +2492,404 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                             className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md shadow-emerald-600/10 disabled:opacity-40 active:scale-[0.98]"
                         >
                             {isUpdatingChannels ? 'Updating Channels...' : 'Synchronize Channels & Support'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            {/* Dynamic System Pricing & Fees Configuration Card */}
+            <div className="bg-zinc-900/50 backdrop-blur-sm rounded-3xl shadow-lg border border-zinc-800 overflow-hidden">
+                <div className="p-4 bg-zinc-900/80 border-b border-zinc-800/80 flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                        <Tag className="text-emerald-400 stroke-[2.2]" size={16} />
+                        <h3 className="font-black text-white text-xs uppercase tracking-wider font-mono">Global Pricing & Platform Fees Configuration</h3>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (window.confirm("Reset all pricing to system defaults?")) {
+                                setPricingForm(DEFAULT_APP_PRICING);
+                            }
+                        }}
+                        className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-[10px] uppercase font-bold rounded-lg border border-zinc-700 transition"
+                    >
+                        Reset Defaults
+                    </button>
+                </div>
+                
+                <form onSubmit={handleUpdatePricingSettings} className="p-5 space-y-6">
+                    <p className="text-[10px] text-zinc-400 font-medium font-mono leading-relaxed uppercase">
+                        Control and dynamically adjust live prices for all subscription tiers, VIP upgrades, investment packages & returns, and system access fees. Changes update instantly across all user devices.
+                    </p>
+
+                    {/* Section 1: Subscriptions */}
+                    <div className="space-y-3 bg-black/40 p-4 rounded-2xl border border-zinc-800/80">
+                        <div className="flex items-center space-x-2 text-emerald-400">
+                            <Sparkles size={14} />
+                            <h4 className="text-[11px] font-mono font-black uppercase tracking-wider text-white">1. Subscription Plans Base Prices (₦)</h4>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">Starter Plan</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                                        value={pricingForm.subscriptionStarter}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, subscriptionStarter: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">Basic Plan</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                                        value={pricingForm.subscriptionBasic}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, subscriptionBasic: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">Pro Plan</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                                        value={pricingForm.subscriptionPro}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, subscriptionPro: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">Enterprise Plan</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                                        value={pricingForm.subscriptionEnterprise}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, subscriptionEnterprise: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section 2: VIP Upgrades */}
+                    <div className="space-y-3 bg-black/40 p-4 rounded-2xl border border-zinc-800/80">
+                        <div className="flex items-center space-x-2 text-amber-400">
+                            <Zap size={14} />
+                            <h4 className="text-[11px] font-mono font-black uppercase tracking-wider text-white">2. VIP Upgrade Tiers Pricing (₦)</h4>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">VIP Tier 1</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-amber-400 outline-none focus:border-amber-500 font-mono font-bold"
+                                        value={pricingForm.vipTier1}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, vipTier1: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">VIP Tier 2</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-amber-400 outline-none focus:border-amber-500 font-mono font-bold"
+                                        value={pricingForm.vipTier2}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, vipTier2: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">VIP Tier 3</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-amber-400 outline-none focus:border-amber-500 font-mono font-bold"
+                                        value={pricingForm.vipTier3}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, vipTier3: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">VIP Tier 4</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-amber-400 outline-none focus:border-amber-500 font-mono font-bold"
+                                        value={pricingForm.vipTier4}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, vipTier4: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">VIP Tier 5</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-amber-400 outline-none focus:border-amber-500 font-mono font-bold"
+                                        value={pricingForm.vipTier5}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, vipTier5: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section 3: Investment Packages */}
+                    <div className="space-y-3 bg-black/40 p-4 rounded-2xl border border-zinc-800/80">
+                        <div className="flex items-center space-x-2 text-cyan-400">
+                            <DollarSign size={14} />
+                            <h4 className="text-[11px] font-mono font-black uppercase tracking-wider text-white">3. Investment Packages Cost & Returns (₦)</h4>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {/* Silver */}
+                            <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2">
+                                <p className="text-[10px] font-bold text-gray-400 uppercase font-mono">Silver Plan</p>
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-mono text-zinc-500 uppercase block">Deposit Cost</label>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs p-2 rounded-lg border border-zinc-800 bg-black text-white outline-none focus:border-cyan-500 font-mono font-bold"
+                                        value={pricingForm.investmentSilverCost}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, investmentSilverCost: Number(e.target.value) || 0 })}
+                                        min={0}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-mono text-zinc-500 uppercase block">Return Profit</label>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs p-2 rounded-lg border border-zinc-800 bg-black text-cyan-400 outline-none focus:border-cyan-500 font-mono font-bold"
+                                        value={pricingForm.investmentSilverReturn}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, investmentSilverReturn: Number(e.target.value) || 0 })}
+                                        min={0}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Gold */}
+                            <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2">
+                                <p className="text-[10px] font-bold text-amber-400 uppercase font-mono">Gold Plan</p>
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-mono text-zinc-500 uppercase block">Deposit Cost</label>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs p-2 rounded-lg border border-zinc-800 bg-black text-white outline-none focus:border-amber-500 font-mono font-bold"
+                                        value={pricingForm.investmentGoldCost}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, investmentGoldCost: Number(e.target.value) || 0 })}
+                                        min={0}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-mono text-zinc-500 uppercase block">Return Profit</label>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs p-2 rounded-lg border border-zinc-800 bg-black text-amber-400 outline-none focus:border-amber-500 font-mono font-bold"
+                                        value={pricingForm.investmentGoldReturn}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, investmentGoldReturn: Number(e.target.value) || 0 })}
+                                        min={0}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Platinum */}
+                            <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2">
+                                <p className="text-[10px] font-bold text-blue-400 uppercase font-mono">Platinum Plan</p>
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-mono text-zinc-500 uppercase block">Deposit Cost</label>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs p-2 rounded-lg border border-zinc-800 bg-black text-white outline-none focus:border-blue-500 font-mono font-bold"
+                                        value={pricingForm.investmentPlatinumCost}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, investmentPlatinumCost: Number(e.target.value) || 0 })}
+                                        min={0}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-mono text-zinc-500 uppercase block">Return Profit</label>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs p-2 rounded-lg border border-zinc-800 bg-black text-blue-400 outline-none focus:border-blue-500 font-mono font-bold"
+                                        value={pricingForm.investmentPlatinumReturn}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, investmentPlatinumReturn: Number(e.target.value) || 0 })}
+                                        min={0}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Diamond */}
+                            <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2">
+                                <p className="text-[10px] font-bold text-purple-400 uppercase font-mono">Diamond Plan</p>
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-mono text-zinc-500 uppercase block">Deposit Cost</label>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs p-2 rounded-lg border border-zinc-800 bg-black text-white outline-none focus:border-purple-500 font-mono font-bold"
+                                        value={pricingForm.investmentDiamondCost}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, investmentDiamondCost: Number(e.target.value) || 0 })}
+                                        min={0}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-mono text-zinc-500 uppercase block">Return Profit</label>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs p-2 rounded-lg border border-zinc-800 bg-black text-purple-400 outline-none focus:border-purple-500 font-mono font-bold"
+                                        value={pricingForm.investmentDiamondReturn}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, investmentDiamondReturn: Number(e.target.value) || 0 })}
+                                        min={0}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section 4: System & Platform Fees */}
+                    <div className="space-y-3 bg-black/40 p-4 rounded-2xl border border-zinc-800/80">
+                        <div className="flex items-center space-x-2 text-rose-400">
+                            <Lock size={14} />
+                            <h4 className="text-[11px] font-mono font-black uppercase tracking-wider text-white">4. Account Verification & System Platform Fees (₦)</h4>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">Bank Account Linking Fee</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                                        value={pricingForm.linkBankFee}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, linkBankFee: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">Investment ID Verification Fee</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                                        value={pricingForm.investmentVerificationFee}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, investmentVerificationFee: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">ChixTok Creator / VIP Access Fee</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                                        value={pricingForm.chixTokCreatorFee}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, chixTokCreatorFee: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">Account Reactivation Fee</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                                        value={pricingForm.reactivationFee}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, reactivationFee: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">Post-Deactivation Recovery Fee</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                                        value={pricingForm.postDeactivationFee}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, postDeactivationFee: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block">Advert Daily Rate</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">₦</span>
+                                    <input
+                                        type="number"
+                                        className="w-full text-xs py-2.5 pl-7 pr-3 rounded-xl border border-zinc-800 bg-zinc-950 text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                                        value={pricingForm.advertDailyPrice}
+                                        onChange={(e) => setPricingForm({ ...pricingForm, advertDailyPrice: Number(e.target.value) || 0 })}
+                                        min={0}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {pricingSuccessMsg && (
+                        <div className="p-3 bg-emerald-950/40 border border-emerald-500/20 text-emerald-400 text-xs uppercase font-bold tracking-tight rounded-xl text-center font-mono animate-in fade-in">
+                            ✓ {pricingSuccessMsg}
+                        </div>
+                    )}
+
+                    <div className="flex justify-end pt-2">
+                        <button 
+                            type="submit" 
+                            disabled={isUpdatingPricing}
+                            className="w-full sm:w-auto px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-40 active:scale-[0.98] cursor-pointer flex items-center justify-center space-x-2"
+                        >
+                            <Tag size={15} />
+                            <span>{isUpdatingPricing ? 'Saving Pricing...' : 'Save & Publish All Pricing Settings'}</span>
                         </button>
                     </div>
                 </form>

@@ -391,4 +391,134 @@ export async function updateAppChannels(channels: AppChannels): Promise<void> {
   });
 }
 
+// Global System Pricing & Rates Config Manager
+export interface AppPricingSettings {
+  // Subscription Packages
+  subPromoPrice: number;
+  subWeeklyPrice: number;
+  subMonthlyPrice: number;
+  subQuarterlyPrice: number;
+  subYearlyPrice: number;
+
+  // VIP Cashout Tiers
+  vip1Price: number;
+  vip2Price: number;
+  vip3Price: number;
+
+  // Bank Account Linking Fee
+  linkBankFee: number;
+
+  // Account Reactivation & Imminent Deactivation
+  reactivationFee: number;
+  postDeactivationFee: number;
+
+  // ChixTok Creator / VIP Hub Access Fee
+  chixTokCreatorFee: number;
+
+  // Investment Verification & Plans
+  investmentVerificationFee: number;
+  investmentSilverAmount: number;
+  investmentSilverReturn: number;
+  investmentGoldAmount: number;
+  investmentGoldReturn: number;
+  investmentPlatinumAmount: number;
+  investmentPlatinumReturn: number;
+  investmentDiamondAmount: number;
+  investmentDiamondReturn: number;
+
+  // Advert Submission Daily Rate
+  advertDailyRate: number;
+}
+
+export const DEFAULT_APP_PRICING: AppPricingSettings = {
+  subPromoPrice: 7000,
+  subWeeklyPrice: 10000,
+  subMonthlyPrice: 17000,
+  subQuarterlyPrice: 48000,
+  subYearlyPrice: 70000,
+
+  vip1Price: 20000,
+  vip2Price: 15000,
+  vip3Price: 9850,
+
+  linkBankFee: 30700,
+
+  reactivationFee: 20000,
+  postDeactivationFee: 30000,
+
+  chixTokCreatorFee: 37000,
+
+  investmentVerificationFee: 25600,
+  investmentSilverAmount: 6750,
+  investmentSilverReturn: 70000,
+  investmentGoldAmount: 20000,
+  investmentGoldReturn: 150000,
+  investmentPlatinumAmount: 30000,
+  investmentPlatinumReturn: 200000,
+  investmentDiamondAmount: 40000,
+  investmentDiamondReturn: 300000,
+
+  advertDailyRate: 1500,
+};
+
+export function useAppPricing() {
+  const [pricing, setPricing] = useState<AppPricingSettings>(DEFAULT_APP_PRICING);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const docRef = doc(db, 'settings', 'pricing');
+    const unsub = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setPricing({
+          subPromoPrice: typeof data.subPromoPrice === 'number' ? data.subPromoPrice : DEFAULT_APP_PRICING.subPromoPrice,
+          subWeeklyPrice: typeof data.subWeeklyPrice === 'number' ? data.subWeeklyPrice : DEFAULT_APP_PRICING.subWeeklyPrice,
+          subMonthlyPrice: typeof data.subMonthlyPrice === 'number' ? data.subMonthlyPrice : DEFAULT_APP_PRICING.subMonthlyPrice,
+          subQuarterlyPrice: typeof data.subQuarterlyPrice === 'number' ? data.subQuarterlyPrice : DEFAULT_APP_PRICING.subQuarterlyPrice,
+          subYearlyPrice: typeof data.subYearlyPrice === 'number' ? data.subYearlyPrice : DEFAULT_APP_PRICING.subYearlyPrice,
+
+          vip1Price: typeof data.vip1Price === 'number' ? data.vip1Price : DEFAULT_APP_PRICING.vip1Price,
+          vip2Price: typeof data.vip2Price === 'number' ? data.vip2Price : DEFAULT_APP_PRICING.vip2Price,
+          vip3Price: typeof data.vip3Price === 'number' ? data.vip3Price : DEFAULT_APP_PRICING.vip3Price,
+
+          linkBankFee: typeof data.linkBankFee === 'number' ? data.linkBankFee : DEFAULT_APP_PRICING.linkBankFee,
+
+          reactivationFee: typeof data.reactivationFee === 'number' ? data.reactivationFee : DEFAULT_APP_PRICING.reactivationFee,
+          postDeactivationFee: typeof data.postDeactivationFee === 'number' ? data.postDeactivationFee : DEFAULT_APP_PRICING.postDeactivationFee,
+
+          chixTokCreatorFee: typeof data.chixTokCreatorFee === 'number' ? data.chixTokCreatorFee : DEFAULT_APP_PRICING.chixTokCreatorFee,
+
+          investmentVerificationFee: typeof data.investmentVerificationFee === 'number' ? data.investmentVerificationFee : DEFAULT_APP_PRICING.investmentVerificationFee,
+          investmentSilverAmount: typeof data.investmentSilverAmount === 'number' ? data.investmentSilverAmount : DEFAULT_APP_PRICING.investmentSilverAmount,
+          investmentSilverReturn: typeof data.investmentSilverReturn === 'number' ? data.investmentSilverReturn : DEFAULT_APP_PRICING.investmentSilverReturn,
+          investmentGoldAmount: typeof data.investmentGoldAmount === 'number' ? data.investmentGoldAmount : DEFAULT_APP_PRICING.investmentGoldAmount,
+          investmentGoldReturn: typeof data.investmentGoldReturn === 'number' ? data.investmentGoldReturn : DEFAULT_APP_PRICING.investmentGoldReturn,
+          investmentPlatinumAmount: typeof data.investmentPlatinumAmount === 'number' ? data.investmentPlatinumAmount : DEFAULT_APP_PRICING.investmentPlatinumAmount,
+          investmentPlatinumReturn: typeof data.investmentPlatinumReturn === 'number' ? data.investmentPlatinumReturn : DEFAULT_APP_PRICING.investmentPlatinumReturn,
+          investmentDiamondAmount: typeof data.investmentDiamondAmount === 'number' ? data.investmentDiamondAmount : DEFAULT_APP_PRICING.investmentDiamondAmount,
+          investmentDiamondReturn: typeof data.investmentDiamondReturn === 'number' ? data.investmentDiamondReturn : DEFAULT_APP_PRICING.investmentDiamondReturn,
+
+          advertDailyRate: typeof data.advertDailyRate === 'number' ? data.advertDailyRate : DEFAULT_APP_PRICING.advertDailyRate,
+        });
+      } else {
+        setPricing(DEFAULT_APP_PRICING);
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error("Error reading pricing settings from Firestore:", error);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
+
+  return { pricing, loading };
+}
+
+export async function updateAppPricing(newPricing: Partial<AppPricingSettings>): Promise<void> {
+  const docRef = doc(db, 'settings', 'pricing');
+  await setDoc(docRef, newPricing, { merge: true });
+}
+
+
 

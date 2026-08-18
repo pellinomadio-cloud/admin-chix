@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Icons } from './Icons';
 import { User, ChixTokVideo, ChixTokComment, Transaction } from '../types';
 import { collection, doc, setDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
-import { db, useBankDetails, syncUserFromLocalToFirestore, sanitizeForFirestore } from '../firebase';
+import { db, useBankDetails, useAppPricing, syncUserFromLocalToFirestore, sanitizeForFirestore } from '../firebase';
 import { compressImageFile } from '../utils/imageCompressor';
 
 interface ChixTokProps {
@@ -193,6 +193,8 @@ const ChixTok: React.FC<ChixTokProps> = ({ user, onUpdateUser, onNavigateToDepos
   const [newCommentText, setNewCommentText] = useState('');
   const [isSubmittingJoin, setIsSubmittingJoin] = useState(false);
   const { bankDetails } = useBankDetails();
+  const { pricing } = useAppPricing();
+  const joinFee = pricing.chixTokCreatorFee || 37000;
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofBase64, setProofBase64] = useState<string | null>(null);
   const [copiedAccount, setCopiedAccount] = useState(false);
@@ -367,9 +369,9 @@ const ChixTok: React.FC<ChixTokProps> = ({ user, onUpdateUser, onNavigateToDepos
     }
   };
 
-  // Join ChixTok for ₦37,000 (Payment to Company Account & Admin Approval)
+  // Join ChixTok with dynamic pricing (Payment to Company Account & Admin Approval)
   const handleJoinChixTok = async () => {
-    const COST = 37000;
+    const COST = joinFee;
     if (!proofBase64) {
       alert("Please select and upload your payment transfer receipt to our company account first.");
       return;
@@ -392,7 +394,7 @@ const ChixTok: React.FC<ChixTokProps> = ({ user, onUpdateUser, onNavigateToDepos
 
       setIsSubmittingJoin(false);
       setShowJoinModal(false);
-      alert('🎉 Payment receipt submitted successfully! Your ₦37,000 ChixTok VIP membership payment to our company account has been sent to the admin team for verification. Once approved by admin, your commenting privileges will be automatically unlocked.');
+      alert(`🎉 Payment receipt submitted successfully! Your ₦${joinFee.toLocaleString()} ChixTok VIP membership payment to our company account has been sent to the admin team for verification. Once approved by admin, your commenting privileges will be automatically unlocked.`);
     } catch (err) {
       console.error("Error submitting ChixTok payment proof:", err);
       setIsSubmittingJoin(false);
@@ -680,7 +682,7 @@ const ChixTok: React.FC<ChixTokProps> = ({ user, onUpdateUser, onNavigateToDepos
                       <span className="text-xs font-black uppercase tracking-wider">Payment Under Verification</span>
                     </div>
                     <p className="text-[11px] text-zinc-300 font-medium leading-relaxed">
-                      Your <strong className="text-yellow-300">₦37,000</strong> transfer receipt to our company account was received and is awaiting admin approval.
+                      Your <strong className="text-yellow-300">₦{joinFee.toLocaleString()}</strong> transfer receipt to our company account was received and is awaiting admin approval.
                     </p>
                     <button 
                       onClick={() => setShowJoinModal(true)}
@@ -697,14 +699,14 @@ const ChixTok: React.FC<ChixTokProps> = ({ user, onUpdateUser, onNavigateToDepos
                       <span className="text-xs font-black uppercase tracking-wider">Comment Privileges Locked</span>
                     </div>
                     <p className="text-[11px] text-zinc-300 font-medium">
-                      Pay <strong className="text-yellow-300">₦37,000</strong> to company account to join ChixTok & drop comments.
+                      Pay <strong className="text-yellow-300">₦{joinFee.toLocaleString()}</strong> to company account to join ChixTok & drop comments.
                     </p>
                     <button 
                       onClick={() => setShowJoinModal(true)}
                       className="w-full py-2.5 rounded-lg bg-gradient-to-r from-rose-500 via-amber-500 to-rose-600 text-white font-black text-xs shadow-md hover:brightness-110 active:scale-95 transition flex items-center justify-center space-x-2"
                     >
                       <Icons.Sparkles size={14} />
-                      <span>Pay ₦37,000 to Company Account</span>
+                      <span>Pay ₦{joinFee.toLocaleString()} to Company Account</span>
                     </button>
                   </div>
                 )
@@ -757,7 +759,7 @@ const ChixTok: React.FC<ChixTokProps> = ({ user, onUpdateUser, onNavigateToDepos
                   </div>
                   <div className="flex justify-between border-b border-zinc-800 pb-2">
                     <span className="text-zinc-400">Amount Paid:</span>
-                    <span className="font-bold text-yellow-400 font-mono">₦37,000</span>
+                    <span className="font-bold text-yellow-400 font-mono">₦{joinFee.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between pb-1">
                     <span className="text-zinc-400">Submitted On:</span>
@@ -798,7 +800,7 @@ const ChixTok: React.FC<ChixTokProps> = ({ user, onUpdateUser, onNavigateToDepos
                 <div className="space-y-1">
                   <h3 className="text-lg font-black text-white tracking-wide">Join ChixTok VIP</h3>
                   <p className="text-xs text-zinc-400 font-medium">
-                    Pay ₦37,000 to the official company account below and upload your transfer receipt for admin approval.
+                    Pay ₦{joinFee.toLocaleString()} to the official company account below and upload your transfer receipt for admin approval.
                   </p>
                 </div>
 
@@ -810,7 +812,7 @@ const ChixTok: React.FC<ChixTokProps> = ({ user, onUpdateUser, onNavigateToDepos
                       Company Account Details
                     </span>
                     <span className="text-[10px] font-mono font-bold text-yellow-400 bg-yellow-950/40 px-2 py-0.5 rounded border border-yellow-500/30">
-                      ₦37,000
+                      ₦{joinFee.toLocaleString()}
                     </span>
                   </div>
 

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from './Icons';
 import { User, Transaction } from '../types';
-import { useBankDetails, useAppChannels, syncUserFromLocalToFirestore } from '../firebase';
+import { useBankDetails, useAppChannels, useAppPricing, syncUserFromLocalToFirestore } from '../firebase';
 import { compressImageFile } from '../utils/imageCompressor';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -87,15 +87,18 @@ const Investment: React.FC<InvestmentProps> = ({ user, onBack, onUpdateUser }) =
   });
 
   const { bankDetails } = useBankDetails();
+  const { pricing } = useAppPricing();
   const accountNumber = bankDetails.accountNumber;
   const bankName = bankDetails.bankName;
   const accountName = bankDetails.accountName;
 
+  const verificationFee = pricing.investmentVerificationFee || 25600;
+
   const plans: InvestmentPlan[] = [
-    { id: 'silver', name: 'Silver Plan', investAmount: 6750, returnAmount: 70000, duration: '24 Hours', color: 'from-gray-400 to-gray-600' },
-    { id: 'gold', name: 'Gold Plan', investAmount: 20000, returnAmount: 150000, duration: '24 Hours', color: 'from-amber-300 to-amber-600' },
-    { id: 'platinum', name: 'Platinum Plan', investAmount: 30000, returnAmount: 200000, duration: '24 Hours', color: 'from-blue-400 to-blue-700' },
-    { id: 'diamond', name: 'Diamond Plan', investAmount: 40000, returnAmount: 300000, duration: '24 Hours', color: 'from-cyan-300 to-cyan-600' },
+    { id: 'silver', name: 'Silver Plan', investAmount: pricing.investmentSilverCost || 6750, returnAmount: pricing.investmentSilverReturn || 70000, duration: '24 Hours', color: 'from-gray-400 to-gray-600' },
+    { id: 'gold', name: 'Gold Plan', investAmount: pricing.investmentGoldCost || 20000, returnAmount: pricing.investmentGoldReturn || 150000, duration: '24 Hours', color: 'from-amber-300 to-amber-600' },
+    { id: 'platinum', name: 'Platinum Plan', investAmount: pricing.investmentPlatinumCost || 30000, returnAmount: pricing.investmentPlatinumReturn || 200000, duration: '24 Hours', color: 'from-blue-400 to-blue-700' },
+    { id: 'diamond', name: 'Diamond Plan', investAmount: pricing.investmentDiamondCost || 40000, returnAmount: pricing.investmentDiamondReturn || 300000, duration: '24 Hours', color: 'from-cyan-300 to-cyan-600' },
   ];
 
   const handleCopy = () => {
@@ -209,9 +212,9 @@ const Investment: React.FC<InvestmentProps> = ({ user, onBack, onUpdateUser }) =
 
         <div className="bg-amber-500/10 p-5 rounded-2xl border border-amber-500/30">
           <p className="text-sm font-medium leading-relaxed text-amber-500">
-            To confirm your withdrawal account is valid, you need to pay <span className="font-black">₦25,600</span> into the management account. 
+            To confirm your withdrawal account is valid, you need to pay <span className="font-black">₦{verificationFee.toLocaleString()}</span> into the management account. 
             <br/><br/>
-            <span className="text-white font-bold">NOTE: This ₦25,600 will be reversed to your account immediately after payment is confirmed. It's just for account validation.</span>
+            <span className="text-white font-bold">NOTE: This ₦{verificationFee.toLocaleString()} will be reversed to your account immediately after payment is confirmed. It's just for account validation.</span>
           </p>
         </div>
 
@@ -219,7 +222,7 @@ const Investment: React.FC<InvestmentProps> = ({ user, onBack, onUpdateUser }) =
           <div className="bg-gray-900 rounded-2xl p-6 shadow-xl border border-amber-500/30 space-y-4">
              <div className="flex justify-between items-center border-b border-gray-800 pb-2">
                 <span className="text-xs text-gray-500 uppercase font-bold">Amount</span>
-                <span className="text-lg font-black text-white">₦25,600</span>
+                <span className="text-lg font-black text-white">₦{verificationFee.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center border-b border-gray-800 pb-2">
                 <span className="text-xs text-gray-500 uppercase font-bold">Account Number</span>
@@ -280,7 +283,7 @@ const Investment: React.FC<InvestmentProps> = ({ user, onBack, onUpdateUser }) =
               ) : (
                 <>
                   <Icons.Upload className="text-gray-500" size={24} />
-                  <span className="text-xs font-bold text-gray-500 uppercase">Click to Upload Receipt (₦25,600)</span>
+                  <span className="text-xs font-bold text-gray-500 uppercase">Click to Upload Receipt (₦{verificationFee.toLocaleString()})</span>
                 </>
               )}
             </label>
@@ -312,7 +315,7 @@ const Investment: React.FC<InvestmentProps> = ({ user, onBack, onUpdateUser }) =
                 restrictionRestoreTime: restoreTime,
                 pendingActivation: 'investment' as const,
                 pendingPaymentProof: investProof,
-                pendingPaymentAmount: 25600,
+                pendingPaymentAmount: verificationFee,
                 pendingPaymentDate: new Date().toISOString(),
                 lastUploadTimestamp: Date.now()
               };

@@ -3,7 +3,7 @@ import React from 'react';
 import { Icons } from './Icons';
 import { Plan } from '../types';
 import { motion } from 'motion/react';
-import { useGiveawayStatus } from '../firebase';
+import { useGiveawayStatus, useAppPricing } from '../firebase';
 
 interface SubscribeProps {
   onPlanSelect: (plan: Plan) => void;
@@ -19,12 +19,13 @@ interface PlanDisplay extends Plan {
 
 const Subscribe: React.FC<SubscribeProps> = ({ onPlanSelect, userBalance }) => {
   const { unlocked: giveawayUnlocked } = useGiveawayStatus();
+  const { pricing } = useAppPricing();
 
   const basePlans = [
     { 
       id: 'promo', 
       name: 'Promo Subscription', 
-      basePrice: 7000, 
+      basePrice: pricing.subPromoPrice || 7000, 
       duration: 'Once Withdrawal Access',
       limitDescription: 'Single Withdrawal Session',
       features: ['Once Withdrawal Allowed', 'Immediate Desk Activator', 'Standard Support'],
@@ -34,7 +35,7 @@ const Subscribe: React.FC<SubscribeProps> = ({ onPlanSelect, userBalance }) => {
     { 
       id: 'weekly', 
       name: 'Weekly Saver', 
-      basePrice: 10000, 
+      basePrice: pricing.subWeeklyPrice || 10000, 
       duration: '7 Days Access',
       limitDescription: 'Withdraw up to ₦200,000',
       features: ['Priority Withdrawals', 'Weekly Rewards', 'Basic Support'],
@@ -44,7 +45,7 @@ const Subscribe: React.FC<SubscribeProps> = ({ onPlanSelect, userBalance }) => {
     { 
       id: 'monthly', 
       name: 'Monthly Pro', 
-      basePrice: 17000, 
+      basePrice: pricing.subMonthlyPrice || 17000, 
       duration: '30 Days Access', 
       recommended: true,
       limitDescription: 'Withdraw up to ₦2,000,000',
@@ -55,7 +56,7 @@ const Subscribe: React.FC<SubscribeProps> = ({ onPlanSelect, userBalance }) => {
     { 
       id: 'quarterly', 
       name: '3 Months Plan', 
-      basePrice: 48000, 
+      basePrice: pricing.subQuarterlyPrice || 48000, 
       duration: '90 Days Access', 
       limitDescription: 'Withdraw up to ₦800,000',
       features: ['Withdraw up to ₦800,000', '90 Days Extended Access', 'Priority Support & Fast Desk'],
@@ -65,7 +66,7 @@ const Subscribe: React.FC<SubscribeProps> = ({ onPlanSelect, userBalance }) => {
     { 
       id: 'yearly', 
       name: 'Premium Elite', 
-      basePrice: 70000, 
+      basePrice: pricing.subYearlyPrice || 70000, 
       duration: '365 Days Access',
       limitDescription: 'Unlimited Withdrawals',
       features: ['No Withdrawal Limits', 'VIP Exclusive Hub', 'Dedicated Manager'],

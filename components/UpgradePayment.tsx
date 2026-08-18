@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from './Icons';
 import { User } from '../types';
-import { syncUserFromLocalToFirestore, useBankDetails } from '../firebase';
+import { syncUserFromLocalToFirestore, useBankDetails, useAppPricing } from '../firebase';
 import { compressImageFile } from '../utils/imageCompressor';
 import { motion, AnimatePresence } from 'motion/react';
 import { Vip2CountdownTimer } from './UpgradeProposal';
@@ -14,33 +14,6 @@ interface UpgradePaymentProps {
   onPaymentComplete: () => void;
   onBack?: () => void;
 }
-
-const VIP_TIER_DETAILS = {
-  vip1: {
-    name: 'VIP 1 — Instant Cashout',
-    price: '₦20,000',
-    amount: 20000,
-    badge: '⚡ INSTANT CASHOUT',
-    timeline: 'Instant (0 Days)',
-    desc: 'Immediately removes withdrawal from pending and credits account.',
-  },
-  vip2: {
-    name: 'VIP 2 — Express Cashout',
-    price: '₦15,000',
-    amount: 15000,
-    badge: '⏱️ 2 WORKING DAYS',
-    timeline: '2 Working Days (3-Day Countdown)',
-    desc: 'Withdrawal cleared from pending after 2 working days. 3-day live countdown active on VIP page.',
-  },
-  vip3: {
-    name: 'VIP 3 — Standard VIP Cashout',
-    price: '₦9,850',
-    amount: 9850,
-    badge: '🗓️ 7 WORKING DAYS',
-    timeline: '7 Working Days',
-    desc: 'Standard cashout processing tier completed within 7 working days.',
-  },
-};
 
 const UpgradePayment: React.FC<UpgradePaymentProps> = ({
   userEmail,
@@ -57,6 +30,38 @@ const UpgradePayment: React.FC<UpgradePaymentProps> = ({
   const [showOpayWarning, setShowOpayWarning] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const { bankDetails } = useBankDetails();
+  const { pricing } = useAppPricing();
+
+  const vip1Price = pricing.vip1Price || 20000;
+  const vip2Price = pricing.vip2Price || 15000;
+  const vip3Price = pricing.vip3Price || 9850;
+
+  const VIP_TIER_DETAILS = {
+    vip1: {
+      name: 'VIP 1 — Instant Cashout',
+      price: `₦${vip1Price.toLocaleString()}`,
+      amount: vip1Price,
+      badge: '⚡ INSTANT CASHOUT',
+      timeline: 'Instant (0 Days)',
+      desc: 'Immediately removes withdrawal from pending and credits account.',
+    },
+    vip2: {
+      name: 'VIP 2 — Express Cashout',
+      price: `₦${vip2Price.toLocaleString()}`,
+      amount: vip2Price,
+      badge: '⏱️ 2 WORKING DAYS',
+      timeline: '2 Working Days (3-Day Countdown)',
+      desc: 'Withdrawal cleared from pending after 2 working days. 3-day live countdown active on VIP page.',
+    },
+    vip3: {
+      name: 'VIP 3 — Standard VIP Cashout',
+      price: `₦${vip3Price.toLocaleString()}`,
+      amount: vip3Price,
+      badge: '🗓️ 7 WORKING DAYS',
+      timeline: '7 Working Days',
+      desc: 'Standard cashout processing tier completed within 7 working days.',
+    },
+  };
 
   const currentTier: 'vip1' | 'vip2' | 'vip3' = (selectedVipTier === 'vip2' || selectedVipTier === 'vip3') ? selectedVipTier : 'vip1';
   const tier = VIP_TIER_DETAILS[currentTier];

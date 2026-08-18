@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Icons } from './Icons';
 import { User } from '../types';
-import { syncUserFromLocalToFirestore, useBankDetails } from '../firebase';
+import { syncUserFromLocalToFirestore, useBankDetails, useAppPricing } from '../firebase';
 import { compressImageFile } from '../utils/imageCompressor';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -17,9 +17,10 @@ const ImminentPayment: React.FC<ImminentPaymentProps> = ({ user, onBack }) => {
   const [showOpayWarning, setShowOpayWarning] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const { bankDetails } = useBankDetails();
+  const { pricing } = useAppPricing();
 
   const isDeactivated = user.deactivationDate ? Date.now() > user.deactivationDate : false;
-  const amount = isDeactivated ? 30000 : 20000;
+  const amount = isDeactivated ? (pricing.postDeactivationFee || 30000) : (pricing.reactivationFee || 20000);
 
   const handlePayNow = () => {
     navigator.clipboard.writeText(bankDetails.accountNumber);
